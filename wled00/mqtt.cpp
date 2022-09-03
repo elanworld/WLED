@@ -76,7 +76,6 @@ void sendHADiscoveryMQTT() {
   device["name"] = mqttDeviceTopic;
 
   DEBUG_PRINT("HA Discovery Sending >>");
-  DEBUG_PRINTLN(buffer);
 
   char pubt[25 + 12 + 8];
   strcpy(pubt, "homeassistant/light/");
@@ -107,7 +106,7 @@ void parseMQTTBriPayload(char* payload) {
 
 void onMqttConnect(bool sessionPresent) {
   //(re)subscribe to required topics
-  char subuf[50];
+  char subuf[38];
 
   if (mqttDeviceTopic[0] != 0) {
     strlcpy(subuf, mqttDeviceTopic, 33);
@@ -119,12 +118,7 @@ void onMqttConnect(bool sessionPresent) {
     strlcpy(subuf, mqttDeviceTopic, 33);
     strcat_P(subuf, PSTR("/command"));
     mqtt->subscribe(subuf, 0);
-
-    try {
-      sendHADiscoveryMQTT();
-    } catch (const std::exception& e) {
-      DEBUG_PRINTLN(e.what() << '\n');
-    }
+    sendHADiscoveryMQTT();
   }
 
   if (mqttGroupTopic[0] != 0) {
@@ -177,27 +171,34 @@ void onMqttMessage(char* topic, char* payload,
   }
 
   // homeassistant command
-  // todo sub topic not work
   if (strcmp_P(topic, PSTR("/command")) == 0) {
     if (payload[0] == '{') {
-      DynamicJsonDocument jsonBuffer(2048);
-      deserializeJson(jsonBuffer, payloadStr);
-      JsonObject commandJson = jsonBuffer.as<JsonObject>();
-      if (commandJson.containsKey("brightness")) {
-        if (commandJson["brightness"].is<int>()) {
-          if (commandJson["brightness"] > 0) bri = commandJson["brightness"];
-        }
-      };
-      if (commandJson.containsKey("state")) {
-        if (strcmp_P(commandJson["state"], "ON") == 0) {
+#ifdef WLED_USE_DYNAMIC_JSON
+      DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+#else
+      if (!requestJSONBufferLock(15)) return;
+#endif
+      deserializeJson(doc, payloadStr);
+      JsonObject commandJson = doc.as<JsonObject>();
+      if (strcmp_P(commandJson["state"], "OFF") == 0) {
+        briLast = bri;
+        bri = 0;
+      } else if (strcmp_P(commandJson["state"], "ON") == 0) {
+        if (commandJson.containsKey("brightness")) {
+          if (commandJson["brightness"].is<int>()) {
+            if (commandJson["brightness"] > 0) {
+              bri = commandJson["brightness"];
+            }
+          }
+        } else {
           bri = briLast;
-        } else if (strcmp_P(commandJson["state"], "OFF") == 0) {
-          bri = 0;
         }
       }
-      applyFinalBri();
+      stateUpdated(CALL_MODE_DIRECT_CHANGE);
       if (commandJson.containsKey("color")) {
-        if (commandJson.containsKey("color")) {
+        if (commandJson["color"].containsKey("r") &&
+            commandJson["color"].containsKey("g") &&
+            commandJson["color"].containsKey("b")) {
           col[0] = commandJson["color"]["r"];
           col[1] = commandJson["color"]["g"];
           col[2] = commandJson["color"]["b"];
