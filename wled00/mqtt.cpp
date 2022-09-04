@@ -6,74 +6,159 @@
 
 #ifdef WLED_ENABLE_MQTT
 #define MQTT_KEEP_ALIVE_TIME 60  // contact the MQTT broker every 60 seconds
+JsonArray fxs;
 
-const char HA_static_JSON[] PROGMEM =
-    R"=====(,"bri_val_tpl":"{{value}}","rgb_cmd_tpl":"{{'#%02x%02x%02x' | format(red, green, blue)}}","rgb_val_tpl":"{{value[1:3]|int(base=16)}},{{value[3:5]|int(base=16)}},{{value[5:7]|int(base=16)}}","qos":0,"opt":true,"pl_on":"ON","pl_off":"OFF","fx_val_tpl":"{{value}}","fx_list":[)=====";
-
-void sendHADiscoveryMQTT() {
-// TODO: With LwIP 1 the ESP loses MQTT connection and causes memory leak when
-// sending discovery packet
-#if ARDUINO_ARCH_ESP32 || LWIP_VERSION_MAJOR >= 1
-  /*
-
-  YYYY is device topic
-  XXXX is device name
-
-  Send out HA MQTT Discovery message on MQTT connect (~2.4kB):
-  {
-  "name": "XXXX",
-  "stat_t":"YYYY/c",
-  "cmd_t":"YYYY",
-  "rgb_stat_t":"YYYY/c",
-  "rgb_cmd_t":"YYYY/col",
-  "bri_cmd_t":"YYYY",
-  "bri_stat_t":"YYYY/g",
-  "bri_val_tpl":"{{value}}",
-  "rgb_cmd_tpl":"{{'#%02x%02x%02x' | format(red, green, blue)}}",
-  "rgb_val_tpl":"{{value[1:3]|int(base=16)}},{{value[3:5]|int(base=16)}},{{value[5:7]|int(base=16)}}",
-  "qos": 0,
-  "opt":true,
-  "pl_on": "ON",
-  "pl_off": "OFF",
-  "fx_cmd_t":"YYYY/api",
-  "fx_stat_t":"YYYY/api",
-  "fx_val_tpl":"{{value}}",
-  "fx_list":[
-  "[FX=00] Solid",
-  "[FX=01] Blink",
-  "[FX=02] ...",
-  "[FX=79] Ripple"
-  ]
+JsonArray getFxs(DynamicJsonDocument doc) {
+  if (fxs.size() > 0) {
+    DEBUGFS_PRINTLN("use exists fxs json,continue")
+    return fxs;
   }
 
-    */
+  fxs = doc.createNestedArray("effect_list");
+  uint16_t jmnlen = strlen_P(JSON_mode_names);
+  uint16_t nameStart = 0, nameEnd = 0;
+  int i = 0;
+  bool isNameStart = true;
+  for (uint16_t j = 0; j < jmnlen; j++) {
+    if (pgm_read_byte(JSON_mode_names + j) == '\"' || j == jmnlen - 1) {
+      if (isNameStart) {
+        nameStart = j + 1;
+      } else {
+        nameEnd = j;
+        char mdn[56];
+        uint16_t namelen = nameEnd - nameStart;
+        strncpy_P(mdn, JSON_mode_names + nameStart, namelen);
+        mdn[namelen] = 0;
+        fxs.add(mdn);
+        i++;
+      }
+      isNameStart = !isNameStart;
+    }
+  }
+  return fxs;
+}
+
+void sendState() {
+#ifdef WLED_USE_DYNAMIC_JSON
+  DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+#else
+  if (!requestJSONBufferLock(15)) return;
+#endif
+  char subuf[38];
+  strlcpy(subuf, mqttDeviceTopic, 33);
+  strcat_P(subuf, PSTR("/state"));
+  if (bri == 0) {
+    doc["state"] = "OFF";
+  } else {
+    doc["state"] = "ON";
+  }
+  doc["brightness"] = bri;
+  doc["color_mode"] = "rgb";
+  JsonObject color = doc.createNestedObject("color");
+  color["r"] = col[0];
+  color["g"] = col[1];
+  color["b"] = col[2];
+  JsonArray fsx = getFxs(doc);
+  if (fsx.size() > effectCurrent) {
+    doc["effect"] = fsx.getElement(effectCurrent);
+  }
+  String payload;
+  serializeJson(doc, payload);
+  mqtt->publish(subuf, 0, false, payload.c_str());  // do not retain message
+  releaseJSONBufferLock();
+}
+
+void setState(String payloadStr, char* payload, char* topic) {
+  // homeassistant command
+  if (strcmp_P(topic, PSTR("/command")) == 0) {
+    if (payload[0] == '{') {
+#ifdef WLED_USE_DYNAMIC_JSON
+      DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+#else
+      if (!requestJSONBufferLock(15)) return;
+#endif
+      deserializeJson(doc, payloadStr);
+      JsonObject commandJson = doc.as<JsonObject>();
+      // update bright
+      if (strcmp_P(commandJson["state"], "OFF") == 0) {
+        briLast = bri;
+        bri = 0;
+      } else if (strcmp_P(commandJson["state"], "ON") == 0) {
+        if (commandJson.containsKey("brightness")) {
+          if (commandJson["brightness"].is<int>()) {
+            if (commandJson["brightness"] > 0) {
+              bri = commandJson["brightness"];
+            }
+          }
+        } else {
+          bri = briLast;
+        }
+      }
+      stateUpdated(CALL_MODE_DIRECT_CHANGE);
+      // update color
+      if (commandJson.containsKey("color")) {
+        if (commandJson["color"].containsKey("r") &&
+            commandJson["color"].containsKey("g") &&
+            commandJson["color"].containsKey("b")) {
+          col[0] = commandJson["color"]["r"];
+          col[1] = commandJson["color"]["g"];
+          col[2] = commandJson["color"]["b"];
+          colorUpdated(CALL_MODE_DIRECT_CHANGE);
+        }
+      }
+      // update fx
+      if (commandJson.containsKey("effect")) {
+        String apireq = "win&FX=";
+        String fx = commandJson["effect"].as<String>();
+        JsonArray fxs = getFxs(doc);
+        for (size_t i = 0; i < fxs.size(); i++) {
+          if (fxs.getElement(i).as<String>().compareTo(fx) == 0) {
+            apireq += i;
+            DEBUG_PRINTLN("fake api from json");
+            handleSet(nullptr, apireq);
+            break;
+          }
+        }
+      }
+    }
+    releaseJSONBufferLock();
+    DEBUG_PRINTLN("update state done");
+  }
+}
+
+void sendHADiscoveryMQTT() {
+#if ARDUINO_ARCH_ESP32 || LWIP_VERSION_MAJOR >= 1
   if (mqtt == nullptr || !mqtt->connected()) return;
-
-  char bufs[36], bufc[38], bufa[40];
-
-  strcpy(bufs, mqttDeviceTopic);
+  char buf[45], bufc[45], bufa[45];
+  strcpy(buf, mqttDeviceTopic);
   strcpy(bufc, mqttDeviceTopic);
   strcpy(bufa, mqttDeviceTopic);
 
-  strcat(bufs, "/state");
+  strcat(buf, "/state");
   strcat(bufc, "/command");
   strcat(bufa, "/status");
-
-  StaticJsonDocument<JSON_OBJECT_SIZE(9) + 512> root;
-  root["schema"] = "json";
-  root["brightness"] = true;
-  root["color_mode"] = true;
-  JsonArray modes = root.createNestedArray("supported_color_modes");
+#ifdef WLED_USE_DYNAMIC_JSON
+  DynamicJsonDocument doc(JSON_BUFFER_SIZE);
+#else
+  if (!requestJSONBufferLock(15)) return;
+#endif
+  doc["schema"] = "json";
+  doc["brightness"] = true;
+  doc["color_mode"] = true;
+  JsonArray modes = doc.createNestedArray("supported_color_modes");
   modes.add("rgb");
-  root["effect"] = true;
-  root["name"] = serverDescription;
-  root["stat_t"] = bufs;
-  root["cmd_t"] = bufc;
-  root["availability_topic"] = bufa;
-  root["unique_id"] = mqttDeviceTopic;
-  JsonObject device = root.createNestedObject("device");
+  doc["effect"] = true;
+  doc["name"] = serverDescription;
+  doc["stat_t"] = buf;
+  doc["cmd_t"] = bufc;
+  doc["availability_topic"] = bufa;
+  doc["unique_id"] = mqttDeviceTopic;
+  JsonObject device = doc.createNestedObject("device");
   device["identifiers"] = mqttDeviceTopic;
   device["name"] = mqttDeviceTopic;
+
+  // add fx_list
+  doc["effect_list"] = getFxs(doc);
 
   DEBUG_PRINT("HA Discovery Sending >>");
 
@@ -82,9 +167,32 @@ void sendHADiscoveryMQTT() {
   strcat(pubt, mqttClientID);
   strcat(pubt, "/config");
   String payload;
-  serializeJson(root, payload);
-  bool success = mqtt->publish(pubt, 0, true, payload.c_str());
-  DEBUG_PRINTLN(success);
+  serializeJson(doc, payload);
+  DEBUG_PRINTLN(payload);
+  mqtt->publish(pubt, 0, true, payload.c_str());
+
+  // ip address
+  doc.clear();
+  doc["device"] = device;
+  memset(buf, 0, sizeof buf);
+  doc["unique_id"] = strcat(strcpy(buf, mqttClientID), "ip_address");
+  memset(buf, 0, sizeof buf);
+  doc["name"] = strcat(strcpy(buf, mqttClientID), " ip address");
+  memset(buf, 0, sizeof buf);
+  doc["stat_t"] = strcat(strcpy(buf, mqttDeviceTopic), "_ip/state");
+  payload.clear();
+  serializeJson(doc, payload);
+  memset(buf, 0, sizeof buf);
+  mqtt->publish(
+      strcat(strcat(strcpy(buf, "homeassistant/sensor/"), mqttClientID),
+             "_ip/config"),
+      0, true, payload.c_str());
+  DEBUG_PRINTLN(payload);
+  memset(buf, 0, sizeof buf);
+  mqtt->publish(strcat(strcpy(buf, mqttDeviceTopic), "_ip/state"), 0, false,
+                Network.localIP().toString().c_str());
+
+  releaseJSONBufferLock();
 #endif
 }
 
@@ -171,43 +279,7 @@ void onMqttMessage(char* topic, char* payload,
   }
 
   // homeassistant command
-  if (strcmp_P(topic, PSTR("/command")) == 0) {
-    if (payload[0] == '{') {
-#ifdef WLED_USE_DYNAMIC_JSON
-      DynamicJsonDocument doc(JSON_BUFFER_SIZE);
-#else
-      if (!requestJSONBufferLock(15)) return;
-#endif
-      deserializeJson(doc, payloadStr);
-      JsonObject commandJson = doc.as<JsonObject>();
-      if (strcmp_P(commandJson["state"], "OFF") == 0) {
-        briLast = bri;
-        bri = 0;
-      } else if (strcmp_P(commandJson["state"], "ON") == 0) {
-        if (commandJson.containsKey("brightness")) {
-          if (commandJson["brightness"].is<int>()) {
-            if (commandJson["brightness"] > 0) {
-              bri = commandJson["brightness"];
-            }
-          }
-        } else {
-          bri = briLast;
-        }
-      }
-      stateUpdated(CALL_MODE_DIRECT_CHANGE);
-      if (commandJson.containsKey("color")) {
-        if (commandJson["color"].containsKey("r") &&
-            commandJson["color"].containsKey("g") &&
-            commandJson["color"].containsKey("b")) {
-          col[0] = commandJson["color"]["r"];
-          col[1] = commandJson["color"]["g"];
-          col[2] = commandJson["color"]["b"];
-          colorUpdated(CALL_MODE_DIRECT_CHANGE);
-        }
-      }
-      releaseJSONBufferLock();
-    }
-  }
+  setState(payloadStr, payload, topic);
 
   // Prefix is stripped from the topic at this point
 
@@ -269,24 +341,7 @@ void publishMqtt() {
   strcat_P(subuf, PSTR("/v"));
   mqtt->publish(subuf, 0, false, apires);  // do not retain message
 
-  char state[1024];
-  strlcpy(subuf, mqttDeviceTopic, 33);
-  strcat_P(subuf, PSTR("/state"));
-  StaticJsonDocument<300> doc;
-  if (bri == 0) {
-    doc["state"] = "OFF";
-  } else {
-    doc["state"] = "ON";
-  }
-  doc["brightness"] = bri;
-  doc["color_mode"] = "rgb";
-  JsonObject color = doc.createNestedObject("color");
-  color["r"] = col[0];
-  color["g"] = col[1];
-  color["b"] = col[2];
-  String payload;
-  serializeJson(doc, payload);
-  mqtt->publish(subuf, 0, false, payload.c_str());  // do not retain message
+  sendState();
 }
 
 // HA autodiscovery was removed in favor of the native integration in HA
