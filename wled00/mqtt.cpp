@@ -80,47 +80,57 @@ void setState(String payloadStr, char* payload, char* topic) {
       deserializeJson(doc, payloadStr);
       JsonObject commandJson = doc.as<JsonObject>();
       // update bright
-      if (strcmp_P(commandJson["state"], "OFF") == 0) {
-        briLast = bri;
-        bri = 0;
-      } else if (strcmp_P(commandJson["state"], "ON") == 0) {
-        if (commandJson.containsKey("brightness")) {
-          if (commandJson["brightness"].is<int>()) {
-            if (commandJson["brightness"] > 0) {
-              bri = commandJson["brightness"];
+      if (commandJson.containsKey("state")) {
+        if (realtimeOverride == 0) {
+          // set realtimeOverride until reboot
+          String apireq = "win&LO=2";
+          DEBUG_PRINTLN("fake api from json");
+          handleSet(nullptr, apireq);
+        }
+
+        if (strcmp_P(commandJson["state"], "OFF") == 0) {
+          briLast = bri;
+          bri = 0;
+        } else if (strcmp_P(commandJson["state"], "ON") == 0) {
+          if (commandJson.containsKey("brightness")) {
+            if (commandJson["brightness"].is<int>()) {
+              if (commandJson["brightness"] > 0) {
+                bri = commandJson["brightness"];
+              }
             }
+          } else {
+            bri = briLast;
           }
-        } else {
-          bri = briLast;
         }
-      }
-      stateUpdated(CALL_MODE_DIRECT_CHANGE);
-      // update color
-      if (commandJson.containsKey("color")) {
-        if (commandJson["color"].containsKey("r") &&
-            commandJson["color"].containsKey("g") &&
-            commandJson["color"].containsKey("b")) {
-          col[0] = commandJson["color"]["r"];
-          col[1] = commandJson["color"]["g"];
-          col[2] = commandJson["color"]["b"];
-          colorUpdated(CALL_MODE_DIRECT_CHANGE);
+        stateUpdated(CALL_MODE_DIRECT_CHANGE);
+        // update color
+        if (commandJson.containsKey("color")) {
+          if (commandJson["color"].containsKey("r") &&
+              commandJson["color"].containsKey("g") &&
+              commandJson["color"].containsKey("b")) {
+            col[0] = commandJson["color"]["r"];
+            col[1] = commandJson["color"]["g"];
+            col[2] = commandJson["color"]["b"];
+            colorUpdated(CALL_MODE_DIRECT_CHANGE);
+          }
         }
-      }
-      // update fx
-      if (commandJson.containsKey("effect")) {
-        String apireq = "win&FX=";
-        String fx = commandJson["effect"].as<String>();
-        JsonArray fxs = getFxs(doc);
-        for (size_t i = 0; i < fxs.size(); i++) {
-          if (fxs.getElement(i).as<String>().compareTo(fx) == 0) {
-            apireq += i;
-            DEBUG_PRINTLN("fake api from json");
-            handleSet(nullptr, apireq);
-            break;
+        // update fx
+        if (commandJson.containsKey("effect")) {
+          String apireq = "win&FX=";
+          String fx = commandJson["effect"].as<String>();
+          JsonArray fxs = getFxs(doc);
+          for (size_t i = 0; i < fxs.size(); i++) {
+            if (fxs.getElement(i).as<String>().compareTo(fx) == 0) {
+              apireq += i;
+              DEBUG_PRINTLN("fake api from json");
+              handleSet(nullptr, apireq);
+              break;
+            }
           }
         }
       }
     }
+
     releaseJSONBufferLock();
     DEBUG_PRINTLN("update state done");
   }
