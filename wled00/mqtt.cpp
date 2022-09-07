@@ -6,17 +6,10 @@
 
 #ifdef WLED_ENABLE_MQTT
 #define MQTT_KEEP_ALIVE_TIME 60 // contact the MQTT broker every 60 seconds
-JsonArray fxs;                  // todo can`t save
 
 JsonArray getFxs(DynamicJsonDocument doc)
 {
-  if (fxs.size() > 0)
-  {
-    DEBUGFS_PRINTLN("use exists fxs json,continue")
-    return fxs;
-  }
-
-  fxs = doc.createNestedArray("fx_list");
+  JsonArray fxs = doc.createNestedArray("fx_list");
   uint16_t jmnlen = strlen_P(JSON_mode_names);
   uint16_t nameStart = 0, nameEnd = 0;
   int i = 0;
