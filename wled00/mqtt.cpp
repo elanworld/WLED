@@ -135,6 +135,7 @@ void setState(String payloadStr, char *payload, char *topic)
         {
           briLast = bri;
           bri = 0;
+          wifi_set_sleep_type(LIGHT_SLEEP_T);
         }
         else if (strcmp_P(commandJson["state"], "ON") == 0)
         {
@@ -212,7 +213,7 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
-    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni)," light");
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " light");
   }
   else
   {
@@ -247,7 +248,7 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
-    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni)," ip");
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " ip");
   }
   else
   {
