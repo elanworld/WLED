@@ -6,7 +6,7 @@
 
 #ifdef WLED_ENABLE_MQTT
 #define MQTT_KEEP_ALIVE_TIME 60 // contact the MQTT broker every 60 seconds
-JsonArray fxs;
+JsonArray fxs;                  // todo can`t save
 
 JsonArray getFxs(DynamicJsonDocument doc)
 {
@@ -16,7 +16,7 @@ JsonArray getFxs(DynamicJsonDocument doc)
     return fxs;
   }
 
-  fxs = doc.createNestedArray("effect_list");
+  fxs = doc.createNestedArray("fx_list");
   uint16_t jmnlen = strlen_P(JSON_mode_names);
   uint16_t nameStart = 0, nameEnd = 0;
   int i = 0;
@@ -44,6 +44,36 @@ JsonArray getFxs(DynamicJsonDocument doc)
   }
   return fxs;
 }
+JsonObject getDevice(DynamicJsonDocument doc)
+{
+  JsonObject device = doc.createNestedObject("dev");
+  device["ids"] = escapedMac;
+  if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
+  {
+    char bufn[15];
+    device["name"] = strcat(strcpy(bufn, "WLED "), deviceUni);
+  }
+  else
+  {
+    device["name"] = serverDescription;
+  }
+  device["mf"] = "WLED";
+  device["sw"] = versionString;
+#ifdef ARDUINO_ARCH_ESP32
+  device["mdl"] = "esp32";
+#else
+  device["mdl"] = "esp8266";
+#endif
+  return device;
+}
+
+void fakeApi(String api)
+{
+  String apireq = "win&";
+  apireq += api;
+  DEBUG_PRINTLN("fake api from json");
+  handleSet(nullptr, apireq);
+}
 
 void sendState()
 {
@@ -70,10 +100,10 @@ void sendState()
   color["r"] = col[0];
   color["g"] = col[1];
   color["b"] = col[2];
-  JsonArray fsx = getFxs(doc);
-  if (fsx.size() > effectCurrent)
+  JsonArray fxs = getFxs(doc);
+  if (fxs.size() > effectCurrent)
   {
-    doc["effect"] = fsx.getElement(effectCurrent);
+    doc["effect"] = fxs.getElement(effectCurrent);
   }
   String payload;
   serializeJson(doc, payload);
@@ -99,12 +129,13 @@ void setState(String payloadStr, char *payload, char *topic)
       // update bright
       if (commandJson.containsKey("state"))
       {
-        if (realtimeOverride == 0)
+        if (commandJson.containsKey("color") || commandJson.containsKey("effect"))
         {
-          // set realtimeOverride until reboot
-          String apireq = "win&LO=2";
-          DEBUG_PRINTLN("fake api from json");
-          handleSet(nullptr, apireq);
+          if (realtimeOverride == 0)
+          {
+            // set realtimeOverride until reboot
+            fakeApi("LO=2");
+          }
         }
 
         if (strcmp_P(commandJson["state"], "OFF") == 0)
@@ -146,16 +177,15 @@ void setState(String payloadStr, char *payload, char *topic)
         // update fx
         if (commandJson.containsKey("effect"))
         {
-          String apireq = "win&FX=";
           String fx = commandJson["effect"].as<String>();
           JsonArray fxs = getFxs(doc);
           for (size_t i = 0; i < fxs.size(); i++)
           {
             if (fxs.getElement(i).as<String>().compareTo(fx) == 0)
             {
+              String apireq = "FX=";
               apireq += i;
-              DEBUG_PRINTLN("fake api from json");
-              handleSet(nullptr, apireq);
+              fakeApi(apireq);
               break;
             }
           }
@@ -173,14 +203,7 @@ void sendHADiscoveryMQTT()
 #if ARDUINO_ARCH_ESP32 || LWIP_VERSION_MAJOR >= 1
   if (mqtt == nullptr || !mqtt->connected())
     return;
-  char buf[45], bufc[45], bufa[45];
-  strcpy(buf, mqttDeviceTopic);
-  strcpy(bufc, mqttDeviceTopic);
-  strcpy(bufa, mqttDeviceTopic);
-
-  strcat(buf, "/state");
-  strcat(bufc, "/command");
-  strcat(bufa, "/status");
+  char bufcom[45];
 #ifdef WLED_USE_DYNAMIC_JSON
   DynamicJsonDocument doc(JSON_BUFFER_SIZE);
 #else
@@ -193,20 +216,28 @@ void sendHADiscoveryMQTT()
   JsonArray modes = doc.createNestedArray("supported_color_modes");
   modes.add("rgb");
   doc["effect"] = true;
-  doc["name"] = serverDescription;
-  doc["stat_t"] = buf;
-  doc["cmd_t"] = bufc;
-  doc["availability_topic"] = bufa;
-  doc["unique_id"] = mqttDeviceTopic;
-  JsonObject device = doc.createNestedObject("device");
-  device["identifiers"] = mqttDeviceTopic;
-  device["name"] = mqttDeviceTopic;
-
+  memset(bufcom, 0, sizeof bufcom);
+  if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
+  {
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni)," light");
+  }
+  else
+  {
+    doc["name"] = strcat(strcpy(bufcom, serverDescription), " light");
+  }
+  memset(bufcom, 0, sizeof bufcom);
+  doc["avty_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/status");
+  memset(bufcom, 0, sizeof bufcom);
+  doc["stat_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/state");
+  memset(bufcom, 0, sizeof bufcom);
+  doc["cmd_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/command");
+  memset(bufcom, 0, sizeof bufcom);
+  doc["uniq_id"] = strcat(strcpy(bufcom, "wled_light_"), escapedMac.c_str());
+  doc["dev"] = getDevice(doc);
   // add fx_list
-  doc["effect_list"] = getFxs(doc);
+  doc["fx_list"] = getFxs(doc);
 
   DEBUG_PRINT("HA Discovery Sending >>");
-
   char pubt[25 + 12 + 8];
   strcpy(pubt, "homeassistant/light/");
   strcat(pubt, mqttClientID);
@@ -218,23 +249,30 @@ void sendHADiscoveryMQTT()
 
   // ip address
   doc.clear();
-  doc["device"] = device;
-  memset(buf, 0, sizeof buf);
-  doc["unique_id"] = strcat(strcpy(buf, mqttClientID), "ip_address");
-  memset(buf, 0, sizeof buf);
-  doc["name"] = strcat(strcpy(buf, mqttClientID), " ip address");
-  memset(buf, 0, sizeof buf);
-  doc["stat_t"] = strcat(strcpy(buf, mqttDeviceTopic), "_ip/state");
+  memset(bufcom, 0, sizeof bufcom);
+  doc["uniq_id"] = strcat(strcpy(bufcom, "wled_ip_"), escapedMac.c_str());
+  memset(bufcom, 0, sizeof bufcom);
+  if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
+  {
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni)," ip");
+  }
+  else
+  {
+    doc["name"] = strcat(strcpy(bufcom, serverDescription), " ip");
+  }
+  memset(bufcom, 0, sizeof bufcom);
+  doc["stat_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "_ip/state");
+  doc["dev"] = getDevice(doc);
   payload.clear();
   serializeJson(doc, payload);
-  memset(buf, 0, sizeof buf);
+  memset(bufcom, 0, sizeof bufcom);
   mqtt->publish(
-      strcat(strcat(strcpy(buf, "homeassistant/sensor/"), mqttClientID),
+      strcat(strcat(strcpy(bufcom, "homeassistant/sensor/"), mqttClientID),
              "_ip/config"),
       0, true, payload.c_str());
   DEBUG_PRINTLN(payload);
-  memset(buf, 0, sizeof buf);
-  mqtt->publish(strcat(strcpy(buf, mqttDeviceTopic), "_ip/state"), 0, false,
+  memset(bufcom, 0, sizeof bufcom);
+  mqtt->publish(strcat(strcpy(bufcom, mqttDeviceTopic), "_ip/state"), 0, false,
                 Network.localIP().toString().c_str());
 
   releaseJSONBufferLock();

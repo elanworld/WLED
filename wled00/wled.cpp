@@ -420,6 +420,9 @@ void WLED::setup()
     strcpy_P(cmDNS, PSTR("wled-"));
     sprintf(cmDNS + 5, "%*s", 6, escapedMac.c_str() + 6);
   }
+  if (deviceUni[0] == 0) {
+    sprintf(deviceUni, "%*s", 6, escapedMac.c_str() + 6);
+  }
   if (mqttDeviceTopic[0] == 0) {
     strcpy_P(mqttDeviceTopic, PSTR("wled/"));
     sprintf(mqttDeviceTopic + 5, "%*s", 6, escapedMac.c_str() + 6);
