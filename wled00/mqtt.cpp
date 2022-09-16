@@ -7,10 +7,11 @@
 #ifdef WLED_ENABLE_MQTT
 #define MQTT_KEEP_ALIVE_TIME 60 // contact the MQTT broker every 60 seconds
 
-JsonArray getFxs(DynamicJsonDocument doc)
+JsonArray getFxs(DynamicJsonDocument json)
 {
-  JsonArray fxs = doc.createNestedArray("fx_list");
+  JsonArray fxs = json.createNestedArray("fx_list");
   uint16_t jmnlen = strlen_P(JSON_mode_names);
+  DEBUG_PRINTLN(JSON_mode_names);
   uint16_t nameStart = 0, nameEnd = 0;
   int i = 0;
   bool isNameStart = true;
@@ -35,6 +36,7 @@ JsonArray getFxs(DynamicJsonDocument doc)
       isNameStart = !isNameStart;
     }
   }
+  DEBUG_PRINTLN(fxs.size());
   return fxs;
 }
 JsonObject getDevice(DynamicJsonDocument doc)
@@ -96,10 +98,11 @@ void sendState()
   JsonArray fxs = getFxs(doc);
   if (fxs.size() > effectCurrent)
   {
-    doc["effect"] = fxs.getElement(effectCurrent);
+    doc["effect"] = fxs.getElement(effectCurrent).as<String>();
   }
   String payload;
   serializeJson(doc, payload);
+  DEBUG_PRINTLN(payload);
   mqtt->publish(subuf, 0, false, payload.c_str()); // do not retain message
   releaseJSONBufferLock();
 }
