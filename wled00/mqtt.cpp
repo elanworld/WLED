@@ -7,9 +7,8 @@
 #ifdef WLED_ENABLE_MQTT
 #define MQTT_KEEP_ALIVE_TIME 60 // contact the MQTT broker every 60 seconds
 
-JsonArray getFxs(DynamicJsonDocument json)
+JsonArray getFxs(JsonArray fxs)
 {
-  JsonArray fxs = json.createNestedArray("fx_list");
   uint16_t jmnlen = strlen_P(JSON_mode_names);
   DEBUG_PRINTLN(JSON_mode_names);
   uint16_t nameStart = 0, nameEnd = 0;
@@ -95,11 +94,13 @@ void sendState()
   color["r"] = col[0];
   color["g"] = col[1];
   color["b"] = col[2];
-  JsonArray fxs = getFxs(doc);
+  JsonArray fxs = doc.createNestedArray("fx");
+  getFxs(fxs);
   if (fxs.size() > effectCurrent)
   {
     doc["effect"] = fxs.getElement(effectCurrent).as<String>();
   }
+  doc.remove("fx");
   String payload;
   serializeJson(doc, payload);
   DEBUG_PRINTLN(payload);
@@ -175,7 +176,9 @@ void setState(String payloadStr, char *payload, char *topic)
         if (commandJson.containsKey("effect"))
         {
           String fx = commandJson["effect"].as<String>();
-          JsonArray fxs = getFxs(doc);
+
+          JsonArray fxs = doc.createNestedArray("fx");
+          getFxs(fxs);
           for (size_t i = 0; i < fxs.size(); i++)
           {
             if (fxs.getElement(i).as<String>().compareTo(fx) == 0)
@@ -232,8 +235,9 @@ void sendHADiscoveryMQTT()
   doc["uniq_id"] = strcat(strcpy(bufcom, "wled_light_"), escapedMac.c_str());
   doc["dev"] = getDevice(doc);
   // add fx_list
-  doc["fx_list"] = getFxs(doc);
-
+  JsonArray fx = doc.createNestedArray("fx_list");
+  getFxs(fx);
+  
   DEBUG_PRINT("HA Discovery Sending >>");
   char pubt[25 + 12 + 8];
   strcpy(pubt, "homeassistant/light/");
