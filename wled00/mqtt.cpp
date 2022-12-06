@@ -139,7 +139,6 @@ void setState(String payloadStr, char *payload, char *topic)
         {
           briLast = bri;
           bri = 0;
-          wifi_set_sleep_type(LIGHT_SLEEP_T);
         }
         else if (strcmp_P(commandJson["state"], "ON") == 0)
         {
@@ -192,6 +191,18 @@ void setState(String payloadStr, char *payload, char *topic)
         }
       }
     }
+  // homeassistant command
+  if (strcmp_P(topic, PSTR("/sync/command")) == 0)
+  {
+    if (strcmp_P(payload, PSTR("ON")) == 0)
+    {
+      fakeApi("LO="+REALTIME_OVERRIDE_ALWAYS);
+    }
+    if (strcmp_P(payload, PSTR("OFF")) == 0)
+    {
+      fakeApi("LO="+REALTIME_OVERRIDE_NONE);
+    }
+  }
 
     releaseJSONBufferLock();
     DEBUG_PRINTLN("update state done");
@@ -275,7 +286,27 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   mqtt->publish(strcat(strcpy(bufcom, mqttDeviceTopic), "_ip/state"), 0, false,
                 Network.localIP().toString().c_str());
-
+  // sync switch
+  memset(bufcom, 0, sizeof bufcom);
+  doc["uniq_id"] = strcat(strcpy(bufcom, "wled_syn_"), escapedMac.c_str());
+  memset(bufcom, 0, sizeof bufcom);
+  if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
+  {
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " sync");
+  }
+  else
+  {
+    doc["name"] = strcat(strcpy(bufcom, serverDescription), " sync");
+  }
+  memset(bufcom, 0, sizeof bufcom);
+  doc["cmd_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/sync/command");
+  payload.clear();
+  serializeJson(doc, payload);
+  memset(bufcom, 0, sizeof bufcom);
+  mqtt->publish(
+      strcat(strcat(strcpy(bufcom, "homeassistant/swich/"), mqttClientID),
+             "_sync/config"),
+      0, true, payload.c_str());
   releaseJSONBufferLock();
 #endif
 }
