@@ -65,7 +65,7 @@ void fakeApi(String api)
 {
   String apireq = "win&";
   apireq += api;
-  DEBUG_PRINTLN("fake api from json");
+  DEBUG_PRINTLN("fake api from json:" + apireq);
   handleSet(nullptr, apireq);
 }
 
@@ -105,11 +105,29 @@ void sendState()
   serializeJson(doc, payload);
   DEBUG_PRINTLN(payload);
   mqtt->publish(subuf, 0, false, payload.c_str()); // do not retain message
+  // override switch
+  payload.clear();
+  if (realtimeOverride == REALTIME_OVERRIDE_NONE)
+  {
+    payload = "OFF";
+  }
+  else
+  {
+    payload = "ON";
+  }
+  memset(subuf, 0, sizeof subuf);
+  strlcpy(subuf, mqttDeviceTopic, 33);
+  strcat_P(subuf, PSTR("_override/state"));
+  DEBUG_PRINTLN(subuf + payload);
+  mqtt->publish(subuf, 0, false, payload.c_str()); // do not retain message
+
   releaseJSONBufferLock();
 }
 
 void setState(String payloadStr, char *payload, char *topic)
 {
+  bool updated = false;
+
   // homeassistant command
   if (strcmp_P(topic, PSTR("/command")) == 0)
   {
@@ -132,6 +150,7 @@ void setState(String payloadStr, char *payload, char *topic)
           {
             // set realtimeOverride until reboot
             fakeApi("LO=2");
+            updated = true;
           }
         }
 
@@ -139,6 +158,7 @@ void setState(String payloadStr, char *payload, char *topic)
         {
           briLast = bri;
           bri = 0;
+          updated = true;
         }
         else if (strcmp_P(commandJson["state"], "ON") == 0)
         {
@@ -149,15 +169,16 @@ void setState(String payloadStr, char *payload, char *topic)
               if (commandJson["brightness"] > 0)
               {
                 bri = commandJson["brightness"];
+                updated = true;
               }
             }
           }
           else
           {
             bri = briLast;
+            updated = true;
           }
         }
-        stateUpdated(CALL_MODE_DIRECT_CHANGE);
         // update color
         if (commandJson.containsKey("color"))
         {
@@ -169,6 +190,7 @@ void setState(String payloadStr, char *payload, char *topic)
             col[1] = commandJson["color"]["g"];
             col[2] = commandJson["color"]["b"];
             colorUpdated(CALL_MODE_DIRECT_CHANGE);
+            updated = true;
           }
         }
         // update fx
@@ -185,28 +207,38 @@ void setState(String payloadStr, char *payload, char *topic)
               String apireq = "FX=";
               apireq += i;
               fakeApi(apireq);
+              updated = true;
               break;
             }
           }
         }
       }
     }
-  // homeassistant command
-  if (strcmp_P(topic, PSTR("/sync/command")) == 0)
-  {
-    if (strcmp_P(payload, PSTR("ON")) == 0)
-    {
-      fakeApi("LO="+REALTIME_OVERRIDE_ALWAYS);
-    }
-    if (strcmp_P(payload, PSTR("OFF")) == 0)
-    {
-      fakeApi("LO="+REALTIME_OVERRIDE_NONE);
-    }
   }
 
-    releaseJSONBufferLock();
-    DEBUG_PRINTLN("update state done");
+  // homeassistant override switch command
+  if (strcmp_P(topic, PSTR("_override/command")) == 0)
+  {
+    DEBUG_PRINTLN("override command topic");
+    if (strcmp_P(payloadStr.c_str(), PSTR("ON")) == 0)
+    {
+      DEBUG_PRINTLN("override command on");
+      fakeApi("LO=2");
+      publishMqtt();
+    }
+    if (strcmp_P(payloadStr.c_str(), PSTR("OFF")) == 0)
+    {
+      fakeApi("LO=0");
+      publishMqtt();
+    }
   }
+  if (updated)
+  {
+    stateUpdated(CALL_MODE_DIRECT_CHANGE);
+  }
+
+  releaseJSONBufferLock();
+  DEBUG_PRINTLN("update state done");
 }
 
 void sendHADiscoveryMQTT()
@@ -248,7 +280,7 @@ void sendHADiscoveryMQTT()
   // add fx_list
   JsonArray fx = doc.createNestedArray("fx_list");
   getFxs(fx);
-  
+
   DEBUG_PRINT("HA Discovery Sending >>");
   char pubt[25 + 12 + 8];
   strcpy(pubt, "homeassistant/light/");
@@ -258,6 +290,10 @@ void sendHADiscoveryMQTT()
   serializeJson(doc, payload);
   DEBUG_PRINTLN(payload);
   mqtt->publish(pubt, 0, true, payload.c_str());
+  memset(bufcom, 0, sizeof bufcom);
+  strlcpy(bufcom, mqttDeviceTopic, 33);
+  strcat_P(bufcom, PSTR("/command"));
+  mqtt->subscribe(bufcom, 0);
 
   // ip address
   doc.clear();
@@ -286,27 +322,33 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   mqtt->publish(strcat(strcpy(bufcom, mqttDeviceTopic), "_ip/state"), 0, false,
                 Network.localIP().toString().c_str());
-  // sync switch
+  // override switch
   memset(bufcom, 0, sizeof bufcom);
-  doc["uniq_id"] = strcat(strcpy(bufcom, "wled_syn_"), escapedMac.c_str());
+  doc["uniq_id"] = strcat(strcpy(bufcom, "wled_override"), escapedMac.c_str());
   memset(bufcom, 0, sizeof bufcom);
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
-    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " sync");
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " override");
   }
   else
   {
-    doc["name"] = strcat(strcpy(bufcom, serverDescription), " sync");
+    doc["name"] = strcat(strcpy(bufcom, serverDescription), " override");
   }
   memset(bufcom, 0, sizeof bufcom);
-  doc["cmd_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/sync/command");
+  doc["stat_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "_override/state");
+  doc["cmd_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "_override/command");
   payload.clear();
   serializeJson(doc, payload);
+  DEBUG_PRINTLN(payload);
   memset(bufcom, 0, sizeof bufcom);
   mqtt->publish(
-      strcat(strcat(strcpy(bufcom, "homeassistant/swich/"), mqttClientID),
-             "_sync/config"),
+      strcat(strcat(strcpy(bufcom, "homeassistant/switch/"), mqttClientID),
+             "_override/config"),
       0, true, payload.c_str());
+  memset(bufcom, 0, sizeof bufcom);
+  strcat(strcpy(bufcom, mqttDeviceTopic), "_override/command");
+  DEBUG_PRINTLN(bufcom);
+  mqtt->subscribe(bufcom, 0);
   releaseJSONBufferLock();
 #endif
 }
@@ -347,8 +389,6 @@ void onMqttConnect(bool sessionPresent)
     mqtt->subscribe(subuf, 0);
     strlcpy(subuf, mqttDeviceTopic, 33);
     strcat_P(subuf, PSTR("/api"));
-    strlcpy(subuf, mqttDeviceTopic, 33);
-    strcat_P(subuf, PSTR("/command"));
     mqtt->subscribe(subuf, 0);
     sendHADiscoveryMQTT();
   }
