@@ -332,7 +332,10 @@ void sendHADiscoveryMQTT()
   }
   memset(bufcom, 0, sizeof bufcom);
   doc["stat_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "_override/state");
+  memset(bufcom, 0, sizeof bufcom);
   doc["cmd_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "_override/command");
+  memset(bufcom, 0, sizeof bufcom);
+  doc["avty_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/status");
   payload.clear();
   serializeJson(doc, payload);
   DEBUG_PRINTLN(payload);
