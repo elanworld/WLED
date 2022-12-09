@@ -29,6 +29,7 @@ bool UsermodManager::readFromConfig(JsonObject& obj)    {
   return allComplete;
 }
 void UsermodManager::onMqttConnect(bool sessionPresent) { for (byte i = 0; i < numMods; i++) ums[i]->onMqttConnect(sessionPresent); }
+void UsermodManager::publishMqtt() { for (byte i = 0; i < numMods; i++) ums[i]->publishMqtt(); }
 bool UsermodManager::onMqttMessage(char* topic, char* payload) {
   for (byte i = 0; i < numMods; i++) if (ums[i]->onMqttMessage(topic, payload)) return true;
   return false;

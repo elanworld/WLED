@@ -11,6 +11,10 @@
  */
 //#include "../usermods/EXAMPLE_v2/usermod_v2_example.h"
 
+#ifdef USERMOD_HMEASSISTANT_DISCOVERY
+#include "../usermods/homeassistant_mqtt_v2/homeassistant_discovery.h"
+#endif
+
 #ifdef USERMOD_BATTERY_STATUS_BASIC
 #include "../usermods/battery_status_basic/usermod_v2_battery_status_basic.h"
 #endif
@@ -242,5 +246,8 @@ void registerUsermods()
   
   #ifdef USERMOD_SI7021_MQTT_HA
   usermods.add(new Si7021_MQTT_HA());
+  #endif
+  #ifdef USERMOD_HMEASSISTANT_DISCOVERY
+  usermods.add(new UsermodHomeAssistantDiscovery());
   #endif
 }

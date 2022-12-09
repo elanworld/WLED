@@ -238,6 +238,7 @@ class Usermod {
     virtual bool readFromConfig(JsonObject& obj) { return true; } // Note as of 2021-06 readFromConfig() now needs to return a bool, see usermod_v2_example.h
     virtual void onMqttConnect(bool sessionPresent) {}
     virtual bool onMqttMessage(char* topic, char* payload) { return false; }
+    virtual void publishMqtt() { }
     virtual uint16_t getId() {return USERMOD_ID_UNSPECIFIED;}
 };
 
@@ -259,6 +260,7 @@ class UsermodManager {
     bool readFromConfig(JsonObject& obj);
     void onMqttConnect(bool sessionPresent);
     bool onMqttMessage(char* topic, char* payload);
+    void publishMqtt();
     bool add(Usermod* um);
     Usermod* lookup(uint16_t mod_id);
     byte getModCount();
