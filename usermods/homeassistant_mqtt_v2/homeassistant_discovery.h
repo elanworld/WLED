@@ -1,18 +1,22 @@
 
 #include "wled.h"
 
+#ifdef ESP8266
+const char JSON_mode_esp8266_names[] PROGMEM = R"=====([
+"Solid","Blink","Breathe","Wipe","Wipe Random","Random Colors","Sweep","Dynamic","Colorloop","Rainbow","Other"
+])=====";
+#endif
 
-
-JsonArray getFxs(JsonArray fxs)
+JsonArray getFxs(JsonArray fxs, const char json_name_str[])
 {
-  uint16_t jmnlen = strlen_P(JSON_mode_names);
-  DEBUG_PRINTLN(JSON_mode_names);
+  uint16_t jmnlen = strlen_P(json_name_str);
+  DEBUG_PRINTLN(json_name_str);
   uint16_t nameStart = 0, nameEnd = 0;
   int i = 0;
   bool isNameStart = true;
   for (uint16_t j = 0; j < jmnlen; j++)
   {
-    if (pgm_read_byte(JSON_mode_names + j) == '\"' || j == jmnlen - 1)
+    if (pgm_read_byte(json_name_str + j) == '\"' || j == jmnlen - 1)
     {
       if (isNameStart)
       {
@@ -23,7 +27,7 @@ JsonArray getFxs(JsonArray fxs)
         nameEnd = j;
         char mdn[56];
         uint16_t namelen = nameEnd - nameStart;
-        strncpy_P(mdn, JSON_mode_names + nameStart, namelen);
+        strncpy_P(mdn, json_name_str + nameStart, namelen);
         mdn[namelen] = 0;
         fxs.add(mdn);
         i++;
@@ -34,6 +38,21 @@ JsonArray getFxs(JsonArray fxs)
   DEBUG_PRINTLN(fxs.size());
   return fxs;
 }
+
+String getEffect(JsonArray fxs, size_t index)
+{
+  String effect;
+  if (fxs.getElement(index).isNull())
+  {
+    effect = fxs.getElement(fxs.size() - 1).as<String>();
+  }
+  else
+  {
+    effect = fxs.getElement(index).as<String>();
+  }
+  return effect;
+}
+
 JsonObject getDevice(DynamicJsonDocument doc)
 {
   JsonObject device = doc.createNestedObject("dev");
@@ -91,11 +110,12 @@ void sendState()
   color["g"] = col[1];
   color["b"] = col[2];
   JsonArray fxs = doc.createNestedArray("fx");
-  getFxs(fxs);
-  if (fxs.size() > effectCurrent)
-  {
-    doc["effect"] = fxs.getElement(effectCurrent).as<String>();
-  }
+#ifdef ESP8266
+  getFxs(fxs, JSON_mode_esp8266_names);
+#else
+  getFxs(fxs, JSON_mode_names);
+#endif
+  doc["effect"] = getEffect(fxs, effectCurrent);
   doc.remove("fx");
   String payload;
   serializeJson(doc, payload);
@@ -195,8 +215,14 @@ void setState(String payloadStr, char *payload, char *topic)
           String fx = commandJson["effect"].as<String>();
 
           JsonArray fxs = doc.createNestedArray("fx");
-          getFxs(fxs);
-          for (size_t i = 0; i < fxs.size(); i++)
+#ifdef ESP8266
+          getFxs(fxs, JSON_mode_esp8266_names);
+          int reduseFxCount = 1;
+#else
+          getFxs(fxs, JSON_mode_names);
+          int reduseFx = 1;
+#endif
+          for (size_t i = 0; i < fxs.size() - reduseFxCount; i++)
           {
             if (fxs.getElement(i).as<String>().compareTo(fx) == 0)
             {
@@ -274,9 +300,12 @@ void sendHADiscoveryMQTT()
   doc["uniq_id"] = strcat(strcpy(bufcom, "wled_light_"), escapedMac.c_str());
   doc["dev"] = getDevice(doc);
   // add fx_list
-  JsonArray fx = doc.createNestedArray("fx_list");
-  getFxs(fx);
-
+  JsonArray fxs = doc.createNestedArray("fx_list");
+#ifdef ESP8266
+  getFxs(fxs, JSON_mode_esp8266_names);
+#else
+  getFxs(fx, JSON_mode_names);
+#endif
   DEBUG_PRINT("HA Discovery Sending >>");
   char pubt[25 + 12 + 8];
   strcpy(pubt, "homeassistant/light/");
@@ -352,28 +381,25 @@ void sendHADiscoveryMQTT()
 #endif
 }
 
-
 class UsermodHomeAssistantDiscovery : public Usermod
 {
 public:
-    void onMqttConnect(bool sessionPresent);
+  void onMqttConnect(bool sessionPresent);
 
-    bool onMqttMessage(char *topic, char *payload);
-    void publishMqtt();
+  bool onMqttMessage(char *topic, char *payload);
+  void publishMqtt();
 };
 
 inline void UsermodHomeAssistantDiscovery::onMqttConnect(bool sessionPresent)
 {
-    sendHADiscoveryMQTT();
+  sendHADiscoveryMQTT();
 }
 inline bool UsermodHomeAssistantDiscovery::onMqttMessage(char *topic, char *payload)
 {
-    setState(payload,payload,topic);
-    return false;
+  setState(payload, payload, topic);
+  return false;
 }
 inline void UsermodHomeAssistantDiscovery::publishMqtt()
 {
-    sendState();
+  sendState();
 }
-
-
