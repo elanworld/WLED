@@ -17,6 +17,7 @@ A fast and feature-rich implementation of an ESP8266/ESP32 webserver to control 
 ## Changed
 - add homeassistant mqtt auto discovery
 - add sync color controller and ip address text from mqtt
+- 页面增加中文翻译
 
 ## ⚙️ Features
 - WS2812FX library integrated for over 100 special effects  
