@@ -8,24 +8,36 @@ std::vector<int> indices = {};
 void addFxsToJsonArray(JsonArray &jsonArray, const std::vector<int> &indices)
 {
   jsonArray.clear();
+  char lineBuffer[128];
   if (indices.empty())
   {
     for (int i = 0; i < strip.getModeCount(); i++)
     {
-      jsonArray.add(String(strip.getModeData(i)));
+        strncpy_P(lineBuffer, strip.getModeData(i), 127);
+        if (lineBuffer[0] != 0)
+        {
+          char *dataPtr = strchr(lineBuffer, '@');
+          if (dataPtr)
+            *dataPtr = 0; // terminate mode data after name
+          jsonArray.add(lineBuffer);
+        }
     }
   }
   else
   {
-    for (int i = 0; i < indices.size(); i++)
+    for (size_t i = 0; i < indices.size(); i++)
     {
       int index = indices[i];
-  DEBUG_PRINTLN(i);
       if (index >= 0 && index < strip.getModeCount())
       {
-  DEBUG_PRINTLN(i);
-        jsonArray.add(String(strip.getModeData(index)));
-  DEBUG_PRINTLN(String(strip.getModeData(index)));
+        strncpy_P(lineBuffer, strip.getModeData(index), 127);
+        if (lineBuffer[0] != 0)
+        {
+          char *dataPtr = strchr(lineBuffer, '@');
+          if (dataPtr)
+            *dataPtr = 0; // terminate mode data after name
+          jsonArray.add(lineBuffer);
+        }
       }
     }
   }
@@ -33,10 +45,17 @@ void addFxsToJsonArray(JsonArray &jsonArray, const std::vector<int> &indices)
 
 int findEffectIndex(String effect)
 {
+  char lineBuffer[128];
   for (int i = 0; i < strip.getModeCount(); i++)
   {
-    DEBUG_PRINTLN("checking effect " + String(strip.getModeData(i)));
-    if (strcmp_P(effect.c_str(), strip.getModeData(i)) == 0)
+    strncpy_P(lineBuffer, strip.getModeData(i), 127);
+    if (lineBuffer[0] != 0)
+    {
+      char *dataPtr = strchr(lineBuffer, '@');
+      if (dataPtr)
+        *dataPtr = 0; // terminate mode data after name
+    }
+    if (strcmp_P(effect.c_str(), lineBuffer) == 0)
     {
       DEBUG_PRINTLN("found effect " + effect + " at index " + String(i));
       return i;
@@ -99,7 +118,15 @@ void sendState()
   color["r"] = col[0];
   color["g"] = col[1];
   color["b"] = col[2];
-  doc["effect"] = String(strip.getModeData(effectCurrent));
+  char lineBuffer[128];
+  strncpy_P(lineBuffer, strip.getModeData(effectCurrent), 127);
+  if (lineBuffer[0] != 0)
+  {
+    char *dataPtr = strchr(lineBuffer, '@');
+    if (dataPtr)
+      *dataPtr = 0; // terminate mode data after name
+    doc["effect"] = lineBuffer;
+  }
   String payload;
   serializeJson(doc, payload);
   DEBUG_PRINTLN(subuf);
@@ -241,7 +268,6 @@ void setState(String payloadStr, char *payload, char *topic)
 
 void sendHADiscoveryMQTT()
 {
-  DEBUG_PRINTLN(0);
 #if ARDUINO_ARCH_ESP32 || LWIP_VERSION_MAJOR >= 1
   if (mqtt == nullptr || !mqtt->connected())
     return;
@@ -276,9 +302,7 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   doc["uniq_id"] = strcat(strcpy(bufcom, "wled_light_"), escapedMac.c_str());
   JsonObject dev = doc.createNestedObject("dev");
-  DEBUG_PRINTLN(1);
   setDeviceAttr(dev);
-  DEBUG_PRINTLN(2);
   // add fx_list
   JsonArray fxs = doc.createNestedArray("fx_list");
   addFxsToJsonArray(fxs, indices);
@@ -288,7 +312,6 @@ void sendHADiscoveryMQTT()
   strcat(pubt, mqttClientID);
   strcat(pubt, "/config");
   String payload;
-  DEBUG_PRINTLN("sending discovery config");
   serializeJson(doc, payload);
   DEBUG_PRINTLN(payload);
   mqtt->publish(pubt, 0, true, payload.c_str());

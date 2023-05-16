@@ -265,7 +265,7 @@ void initServer()
   });
 #endif
 
-  server.on("/language.js", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/iro.js", HTTP_GET, [](AsyncWebServerRequest *request){
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", iroJs, iroJs_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -273,7 +273,7 @@ void initServer()
   });
   
 
-  server.on("/iro.js", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/language.js", HTTP_GET, [](AsyncWebServerRequest *request){
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", languageJs, languageJs_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
