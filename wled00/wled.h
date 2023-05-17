@@ -408,7 +408,6 @@ WLED_GLOBAL bool e131SkipOutOfSequence _INIT(false);              // freeze inst
 WLED_GLOBAL uint16_t pollReplyCount _INIT(0);                     // count number of replies for ArtPoll node report
 
 WLED_GLOBAL bool mqttEnabled _INIT(false);
-WLED_GLOBAL char deviceUni[10] _INIT("");            // main MQTT topic (individual per device, default is wled/mac)
 WLED_GLOBAL char mqttDeviceTopic[33] _INIT("");            // main MQTT topic (individual per device, default is wled/mac)
 WLED_GLOBAL char mqttGroupTopic[33] _INIT("wled/all");     // second MQTT topic (for example to group devices)
 WLED_GLOBAL char mqttServer[33] _INIT("");                 // both domains and IPs should work (no SSL)

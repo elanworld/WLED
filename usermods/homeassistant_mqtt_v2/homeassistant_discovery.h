@@ -70,7 +70,7 @@ void setDeviceAttr(JsonObject &device)
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
     char bufn[15];
-    device["name"] = strcat(strcpy(bufn, "WLED "), deviceUni);
+    device["name"] = strcat(strcpy(bufn, "WLED "), escapedMac.c_str() + 6);
   }
   else
   {
@@ -287,7 +287,7 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
-    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " light");
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), escapedMac.c_str() + 6), " light");
   }
   else
   {
@@ -327,7 +327,7 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
-    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " ip");
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), escapedMac.c_str() + 6), " ip");
   }
   else
   {
@@ -354,7 +354,7 @@ void sendHADiscoveryMQTT()
   memset(bufcom, 0, sizeof bufcom);
   if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
   {
-    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), deviceUni), " override");
+    doc["name"] = strcat(strcat(strcat(strcpy(bufcom, serverDescription), " "), escapedMac.c_str() + 6), " override");
   }
   else
   {
