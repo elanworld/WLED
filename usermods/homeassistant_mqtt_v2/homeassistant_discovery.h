@@ -1,6 +1,6 @@
 #include "wled.h"
 #ifdef ESP8266
-std::vector<int> indices = {0, 1, 2, 3, 5, 8, 10, 26, 29, 94};
+std::vector<int> indices = {FX_MODE_STATIC, FX_MODE_BLINK, FX_MODE_BREATH, FX_MODE_COLOR_WIPE, FX_MODE_RANDOM_COLOR, FX_MODE_SCAN, FX_MODE_RAINBOW, FX_MODE_RAINBOW_CYCLE, FX_MODE_BLINK_RAINBOW, FX_MODE_CHASE_RANDOM, FX_MODE_SINELON_RAINBOW};
 #else
 std::vector<int> indices = {};
 #endif
