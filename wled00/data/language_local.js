@@ -520,7 +520,7 @@ function translateText() {
     "(leave empty for no Quick load button)": "（留空则不显示快速加载按钮）",
     // usermod_*.htm
     "language": "语言",
-    "UseLocalTranslations": "使用本地翻译",
+    "UseLocalTranslation": "使用翻译",
     "LanguageJsUrl": "语言翻译脚本",
 
   };
@@ -706,15 +706,7 @@ function translateText() {
   }
 
 
-  // 替换元素文本
   var elements = document.querySelectorAll('*')
-  elements.forEach(function (element) {
-    let text = element.textContent.trim()
-    if (element.nodeType === Node.TEXT_NODE && translations.hasOwnProperty(text) && element.childNodes.length <= 1) {
-      element.textContent = translations[text];
-    }
-  });
-
   // 替换子节点文本
   elements.forEach(function (element) {
     if (element) {
