@@ -15,6 +15,10 @@
 #include "../usermods/homeassistant_mqtt_v2/homeassistant_discovery.h"
 #endif
 
+#ifdef USERMOD_LANGUAGE
+#include "../usermods/Language_translation/language_translation.h"
+#endif
+
 #ifdef USERMOD_BATTERY_STATUS_BASIC
   #include "../usermods/battery_status_basic/usermod_v2_battery_status_basic.h"
 #endif
@@ -355,5 +359,9 @@ void registerUsermods()
   
   #ifdef USERMOD_HMEASSISTANT_DISCOVERY
   usermods.add(new UsermodHomeAssistantDiscovery());
+  #endif
+
+  #ifdef USERMOD_LANGUAGE
+  usermods.add(new LanguageUsermod());
   #endif
 }

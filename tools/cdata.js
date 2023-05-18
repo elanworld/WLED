@@ -417,8 +417,15 @@ const char PAGE_dmxmap[] PROGMEM = R"=====()=====";
     },
 
     {
+      file: "language_local.js",
+      name: "languageLocalJs",
+      filter: "js-minify",
+      method: "gzip"
+    },
+    {
       file: "language.js",
       name: "languageJs",
+      filter: "js-minify",
       method: "gzip"
     },
 
