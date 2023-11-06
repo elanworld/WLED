@@ -522,6 +522,8 @@ function translateText() {
     "language": "语言",
     "UseLocalTranslation": "使用翻译",
     "LanguageJsUrl": "语言翻译脚本",
+    "Bluetooth": "蓝牙",
+    "BleOpen": "打开蓝牙接口",
 
   };
 

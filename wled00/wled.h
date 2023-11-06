@@ -430,7 +430,7 @@ WLED_GLOBAL bool hueApplyColor _INIT(true);
 WLED_GLOBAL uint16_t serialBaud _INIT(1152); // serial baud rate, multiply by 100
 
 // Time CONFIG
-WLED_GLOBAL bool ntpEnabled _INIT(false);    // get internet time. Only required if you use clock overlays or time-activated macros
+WLED_GLOBAL bool ntpEnabled _INIT(true);    // get internet time. Only required if you use clock overlays or time-activated macros
 WLED_GLOBAL bool useAMPM _INIT(false);       // 12h/24h clock format
 WLED_GLOBAL byte currentTimezone _INIT(23);   // Timezone ID. Refer to timezones array in wled10_ntp.ino
 WLED_GLOBAL int utcOffsetSecs _INIT(0);      // Seconds to offset from UTC before timzone calculation
@@ -481,6 +481,10 @@ WLED_GLOBAL bool forceReconnect _INIT(false);
 WLED_GLOBAL uint32_t lastReconnectAttempt _INIT(0);
 WLED_GLOBAL bool interfacesInited _INIT(false);
 WLED_GLOBAL bool wasConnected _INIT(false);
+
+// blutooth
+WLED_GLOBAL bool bleOpen _INIT(false);
+WLED_GLOBAL bool wifiOpen _INIT(true); // bluetooth and wifi cant be opened together
 
 // color
 WLED_GLOBAL byte lastRandomIndex _INIT(0);        // used to save last random color so the new one is not the same

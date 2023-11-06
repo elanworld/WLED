@@ -14,6 +14,9 @@
 #ifdef USERMOD_HMEASSISTANT_DISCOVERY
 #include "../usermods/homeassistant_mqtt_v2/homeassistant_discovery.h"
 #endif
+#ifdef BLE_GATT
+#include "../usermods/ble_gatt_api/ble_gatt_api.h"
+#endif
 
 #ifdef USERMOD_LANGUAGE
 #include "../usermods/Language_translation/language_translation.h"
@@ -357,6 +360,10 @@ void registerUsermods()
   usermods.add(new ShtUsermod());
   #endif
   
+  #ifdef BLE_GATT
+  usermods.add(new BleGattApiServer());
+  #endif
+
   #ifdef USERMOD_HMEASSISTANT_DISCOVERY
   usermods.add(new UsermodHomeAssistantDiscovery());
   #endif
