@@ -118,15 +118,13 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
 
 class BleGattApiServer : public Usermod
 {
-private:
-  bool bleApiOpen = false;
 
 public:
   virtual void setup()
   {
     if (!bleOpen)
     {
-      DEBUG_PRINTLN("ble server can not be opened because wifi is using the RF module!");
+      DEBUG_PRINTLN("ble server closed!");
       return;
     }
     DEBUG_PRINTLN("Starting NimBLE Server");
@@ -161,28 +159,30 @@ public:
     pAdvertising->start();
     DEBUG_PRINTLN("Advertising Started");
   }
+
   virtual void loop()
   {
   }
 
-  virtual void addToJsonState(JsonObject &root)
-  {
-    root["bleOpen"] = bleApiOpen;
-  }
-  virtual void readFromJsonState(JsonObject &root)
-  {
-    bleOpen = root["bleOpen"] | false; // 如果不存在 bleOpen，则默认为 false
-  }
   virtual void addToConfig(JsonObject &root)
   {
     JsonObject top = root.createNestedObject("Bluetooth");
     top["bleOpen"] = bleOpen;
+    top["wifiOpen"] = wifiOpen;
   }
   virtual bool readFromConfig(JsonObject &root)
   {
     JsonObject top = root["Bluetooth"];
     bool configComplete = !top.isNull();
     configComplete &= getJsonValue(top["bleOpen"], bleOpen);
+    configComplete &= getJsonValue(top["wifiOpen"], wifiOpen);
+    // board will crash if wifi bluetooth open togather
+    if (bleOpen == wifiOpen)
+    {
+      DEBUG_PRINTLN("readFromConfig: wifi open bluetooth close");
+      wifiOpen = true;
+      bleOpen = false;
+    }
     return configComplete;
   }
 };

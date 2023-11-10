@@ -722,7 +722,7 @@ void WLED::initInterfaces()
 
 void WLED::handleConnection()
 {
-  if (bleOpen || !wifiOpen)
+  if (!wifiOpen)
   {
     return;
   }

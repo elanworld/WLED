@@ -163,10 +163,18 @@ void setState(String payloadStr, const char *topic)
             // bleSetting
             if (commandJson.containsKey("bleOpen"))
             {
-                bleOpen = commandJson["bleOpen"].as<boolean>();
-                if (!bleOpen)
+                bool bleOpenResut = commandJson["bleOpen"].as<boolean>();
+                if (bleOpenResut != bleOpen)
                 {
-                    wifiOpen = false;
+                    bleOpen = bleOpenResut;
+                    // board will crash if wifi bluetooth open togather
+                    if (bleOpen == wifiOpen)
+                    {
+                        DEBUG_PRINTLN("setState: wifi open bluetooth close");
+                        wifiOpen = true;
+                        bleOpen = false;
+                    }
+
                     doSerializeConfig = true;
                 }
             }
