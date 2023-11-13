@@ -83,83 +83,73 @@ void setState(String payloadStr, const char *topic)
 #ifdef WLED_USE_DYNAMIC_JSON
             DynamicJsonDocument doc(JSON_BUFFER_SIZE);
 #else
-            if (!requestJSONBufferLock(15))
+            if (!requestJSONBufferLock(16))
                 return;
 #endif
             deserializeJson(doc, payloadStr);
             JsonObject commandJson = doc.as<JsonObject>();
-            // update bright
-            if (commandJson.containsKey("state"))
+            // update color
+            if (commandJson.containsKey("color"))
             {
-                if (commandJson.containsKey("color") || commandJson.containsKey("effect"))
+                if (commandJson["color"].containsKey("r") &&
+                    commandJson["color"].containsKey("g") &&
+                    commandJson["color"].containsKey("b"))
                 {
-                    if (realtimeOverride == 0)
-                    {
-                        // set realtimeOverride until reboot
-                        setRealtimeOverride(2);
-                        updated = true;
-                    }
-                }
-
-                if (strcmp_P(commandJson["state"], "OFF") == 0)
-                {
-                    if (bri != 0)
-                    {
-                        briLast = bri;
-                        bri = 0;
-                    }
+                    col[0] = commandJson["color"]["r"];
+                    col[1] = commandJson["color"]["g"];
+                    col[2] = commandJson["color"]["b"];
+                    setRealtimeOverride(REALTIME_OVERRIDE_ALWAYS);
+                    colorUpdated(CALL_MODE_DIRECT_CHANGE);
                     updated = true;
                 }
-                else if (strcmp_P(commandJson["state"], "ON") == 0)
+            }
+            // update fx
+            if (commandJson.containsKey("effect"))
+            {
+                String fx = commandJson["effect"].as<String>();
+                int effectIndex = findEffectIndex(fx);
+                if (effectIndex != -1)
                 {
-                    if (commandJson.containsKey("brightness"))
+                    for (uint8_t i = 0; i < strip.getSegmentsNum(); i++)
                     {
-                        if (commandJson["brightness"].is<int>())
-                        {
-                            if (commandJson["brightness"] > 0)
-                            {
-                                bri = commandJson["brightness"];
-                                updated = true;
-                            }
-                        }
+                        strip.setMode(i, effectIndex);
+                        stateChanged = true;
                     }
-                    else
-                    {
-                        bri = briLast;
-                        updated = true;
-                    }
-                }
-                // update color
-                if (commandJson.containsKey("color"))
-                {
-                    if (commandJson["color"].containsKey("r") &&
-                        commandJson["color"].containsKey("g") &&
-                        commandJson["color"].containsKey("b"))
-                    {
-                        col[0] = commandJson["color"]["r"];
-                        col[1] = commandJson["color"]["g"];
-                        col[2] = commandJson["color"]["b"];
-                        colorUpdated(CALL_MODE_DIRECT_CHANGE);
-                        updated = true;
-                    }
-                }
-                // update fx
-                if (commandJson.containsKey("effect"))
-                {
-                    String fx = commandJson["effect"].as<String>();
-                    int effectIndex = findEffectIndex(fx);
-                    if (effectIndex != -1)
-                    {
-                        for (uint8_t i = 0; i < strip.getSegmentsNum(); i++)
-                        {
-                            strip.setMode(i, effectIndex);
-                            stateChanged = true;
-                        }
-                        updated = true;
-                    }
+                    setRealtimeOverride(2);
+                    updated = true;
                 }
             }
-
+            // update bright
+            if (commandJson.containsKey("state") && strcmp_P(commandJson["state"], "OFF") == 0)
+            {
+                if (bri != 0)
+                {
+                    briLast = bri;
+                    bri = 0;
+                }
+                updated = true;
+            }
+            else if (commandJson.containsKey("state") && strcmp_P(commandJson["state"], "ON") == 0 && commandJson.containsKey("brightness"))
+            {
+                if (commandJson["brightness"] > 0)
+                {
+                    bri = commandJson["brightness"];
+                    updated = true;
+                }
+                else
+                {
+                    bri = briLast;
+                    updated = true;
+                }
+            }
+            else if (commandJson.containsKey("brightness"))
+            {
+                if (commandJson["brightness"] > 0)
+                {
+                    bri = commandJson["brightness"];
+                    updated = true;
+                }
+            }
             // bleSetting
             if (commandJson.containsKey("bleOpen"))
             {
@@ -208,7 +198,6 @@ void setState(String payloadStr, const char *topic)
     if (updated)
     {
         stateUpdated(CALL_MODE_DIRECT_CHANGE);
-        publishMqtt();
     }
     DEBUG_PRINTLN("update state done");
 }

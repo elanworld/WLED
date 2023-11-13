@@ -236,6 +236,7 @@ public:
   inline bool onMqttMessage(char *topic, char *payload)
   {
     setState(payload, topic);
+    publishMqtt();
     return true;
   }
   inline void publishMqtt()
