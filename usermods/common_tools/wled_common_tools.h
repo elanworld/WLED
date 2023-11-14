@@ -126,26 +126,37 @@ void setState(String payloadStr, const char *topic)
                 {
                     briLast = bri;
                     bri = 0;
-                }
-                updated = true;
-            }
-            else if (commandJson.containsKey("state") && strcmp_P(commandJson["state"], "ON") == 0 && commandJson.containsKey("brightness"))
-            {
-                if (commandJson["brightness"] > 0)
-                {
-                    bri = commandJson["brightness"];
                     updated = true;
+                }
+            }
+            else if (commandJson.containsKey("state") && strcmp_P(commandJson["state"], "ON") == 0)
+            {
+                if (commandJson.containsKey("brightness") && commandJson["brightness"] > 0)
+                {
+                    briLast = bri;
+                    bri = commandJson["brightness"];
                 }
                 else
                 {
-                    bri = briLast;
-                    updated = true;
+                    if (briLast != 0)
+                    {
+                        int temp = briLast;
+                        briLast = bri;
+                        bri = temp;
+                    }
+                    else
+                    {
+                        briLast = bri;
+                        bri = 128;
+                    }
                 }
+                updated = true;
             }
             else if (commandJson.containsKey("brightness"))
             {
                 if (commandJson["brightness"] > 0)
                 {
+                    briLast = bri;
                     bri = commandJson["brightness"];
                     updated = true;
                 }

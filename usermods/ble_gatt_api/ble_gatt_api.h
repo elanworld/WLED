@@ -71,7 +71,7 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     DEBUG_PRINT(": onWrite(), value: ");
     DEBUG_PRINTLN(pCharacteristic->getValue().c_str());
     setState(pCharacteristic->getValue().c_str(), "/command");
-    notify();
+    notifyToCilent();
   };
 
   void onNotify(NimBLECharacteristic *pCharacteristic)
@@ -115,25 +115,27 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     str += std::string(pCharacteristic->getUUID()).c_str();
     DEBUG_PRINTLN(str);
   };
-};
 
-// notyfy current state
-void notify()
-{
-  if (pServer->getConnectedCount())
+  // notyfy current state
+  void notifyToCilent()
   {
-    NimBLEService *pSvc = pServer->getServiceByUUID("DEAD");
-    if (pSvc)
+    if (pServer->getConnectedCount())
     {
-      NimBLECharacteristic *pChr = pSvc->getCharacteristic("BEEF");
-      if (pChr)
+      NimBLEService *pSvc = pServer->getServiceByUUID("DEAD");
+      if (pSvc)
       {
-        pChr->setValue(getState());
-        pChr->notify(true);
+        NimBLECharacteristic *pChr = pSvc->getCharacteristic("BEEF");
+        if (pChr)
+        {
+          pChr->setValue(getState());
+          DEBUG_PRINT("notify:");
+          DEBUG_PRINTLN(pChr->getValue());
+          pChr->notify(true);
+        }
       }
     }
   }
-}
+};
 
 class BleGattApiServer : public Usermod
 {
