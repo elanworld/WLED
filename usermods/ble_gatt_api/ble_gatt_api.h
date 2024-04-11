@@ -1,8 +1,18 @@
 #include "wled.h"
 #include <NimBLEDevice.h>
 #include "../common_tools/wled_common_tools.h"
-
+  #ifdef USERMOD_SLEEP
+#include "../sleep_manager/sleep_manager.h"
+#endif
 static NimBLEServer *pServer;
+
+void setSleep(bool requestWake)
+{
+#ifdef USERMOD_SLEEP
+  gettimeofday(&change_time, NULL);
+  modules["ble"] = requestWake;
+#endif
+}
 
 class ServerCallbacks : public NimBLEServerCallbacks
 {
@@ -11,6 +21,7 @@ class ServerCallbacks : public NimBLEServerCallbacks
     DEBUG_PRINT("Client connected");
     DEBUG_PRINTLN("Multi-connect support: start advertising");
     NimBLEDevice::startAdvertising();
+    setSleep(true);
   };
 
   void onConnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
@@ -18,11 +29,13 @@ class ServerCallbacks : public NimBLEServerCallbacks
     DEBUG_PRINT("Client address: ");
     DEBUG_PRINTLN(NimBLEAddress(desc->peer_ota_addr).toString().c_str());
     pServer->updateConnParams(desc->conn_handle, 24, 48, 0, 60);
+    setSleep(true);
   };
   void onDisconnect(NimBLEServer *pServer)
   {
     DEBUG_PRINTLN("Client disconnected - start advertising");
     NimBLEDevice::startAdvertising();
+    setSleep(false);
   };
   void onMTUChange(uint16_t MTU, ble_gap_conn_desc *desc)
   {
@@ -63,6 +76,7 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     pCharacteristic->setValue(getState());
     DEBUG_PRINT(": onRead(), value: ");
     DEBUG_PRINTLN(pCharacteristic->getValue().c_str());
+    setSleep(true);
   };
 
   void onWrite(NimBLECharacteristic *pCharacteristic)
@@ -72,6 +86,7 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     DEBUG_PRINTLN(pCharacteristic->getValue().c_str());
     setState(pCharacteristic->getValue().c_str(), "/command");
     notifyToCilent();
+    setSleep(true);
   };
 
   void onNotify(NimBLECharacteristic *pCharacteristic)
@@ -88,6 +103,7 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     str += ", ";
     str += NimBLEUtils::returnCodeToString(code);
     DEBUG_PRINTLN(str);
+    setSleep(true);
   };
 
   void onSubscribe(NimBLECharacteristic *pCharacteristic, ble_gap_conn_desc *desc, uint16_t subValue)

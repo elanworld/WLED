@@ -92,6 +92,8 @@
 
 #include "src/dependencies/network/Network.h"
 
+#include <unordered_map>
+
 #ifdef WLED_USE_MY_CONFIG
   #include "my_config.h"
 #endif
@@ -680,6 +682,13 @@ WLED_GLOBAL uint16_t ledMaps _INIT(0); // bitfield representation of available l
 
 // Usermod manager
 WLED_GLOBAL UsermodManager usermods _INIT(UsermodManager());
+
+// sleep time
+#ifdef USERMOD_SLEEP
+WLED_GLOBAL bool enableSleep _INIT(false);
+WLED_GLOBAL RTC_DATA_ATTR struct timeval change_time; // change status time
+WLED_GLOBAL std::unordered_map<std::string, bool> modules; // wakeup module container
+#endif
 
 // global I2C SDA pin (used for usermods)
 #ifndef I2CSDAPIN
