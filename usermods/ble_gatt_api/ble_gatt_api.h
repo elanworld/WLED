@@ -201,9 +201,6 @@ public:
       DEBUG_PRINTLN("ble server closed!");
       return;
     }
-    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-              { request->send(200, "text/plain", "Hello, World!"); });
-    server.begin();
     DEBUG_PRINTLN("Starting NimBLE Server");
     if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
     {
