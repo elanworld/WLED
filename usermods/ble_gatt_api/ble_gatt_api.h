@@ -14,6 +14,32 @@ void setSleep(bool requestWake)
 #endif
 }
 
+String padStringToUUID(const String& str) {
+    String paddedStr = str;
+    while (paddedStr.length() < 32) {
+        paddedStr += "0";
+    }
+
+    // Insert hyphens at appropriate positions
+    paddedStr = paddedStr.substring(0, 8) + "-" + paddedStr.substring(8, 12) + "-" +
+                paddedStr.substring(12, 16) + "-" + paddedStr.substring(16, 20) + "-" +
+                paddedStr.substring(20);
+
+    return paddedStr;
+}
+
+
+String stringToHex(const String& str) {
+  String hexString;
+  for (char c : str) {
+    char buf[3];
+    sprintf(buf, "%02X", static_cast<unsigned char>(c));
+    hexString += buf;
+  }
+  return hexString;
+}
+
+
 class ServerCallbacks : public NimBLEServerCallbacks
 {
   void onConnect(NimBLEServer *pServer)
@@ -157,6 +183,13 @@ class BleGattApiServer : public Usermod
 {
 
 public:
+  String serverUUID;
+  String charUUID;
+
+
+    BleGattApiServer() : serverUUID(padStringToUUID(stringToHex("WLED"))),
+                         charUUID(padStringToUUID(stringToHex("WLED01"))) {}
+
   virtual void setup()
   {
     if (!bleOpen)
@@ -179,9 +212,9 @@ public:
     pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
 
-    NimBLEService *pBaadService = pServer->createService("DEAD");
+    NimBLEService *pBaadService = pServer->createService(serverUUID.c_str());
     NimBLECharacteristic *pFoodCharacteristic = pBaadService->createCharacteristic(
-        "BEEF",
+        charUUID.c_str(),
         NIMBLE_PROPERTY::READ |
             NIMBLE_PROPERTY::WRITE |
             NIMBLE_PROPERTY::NOTIFY);
