@@ -1,23 +1,33 @@
 #include "wled.h"
 #include <NimBLEDevice.h>
 #include "../common_tools/wled_common_tools.h"
-  #ifdef USERMOD_SLEEP
+#ifdef USERMOD_SLEEP
 #include "../sleep_manager/sleep_manager.h"
 #endif
 static NimBLEServer *pServer;
 
-void setSleep(bool requestWake)
+class BleMod
 {
-#ifdef USERMOD_SLEEP
-  gettimeofday(&change_time, NULL);
-  modules["ble"] = requestWake;
-#endif
-}
+public:
+  String serverUUID;
+  String charUUID;
+  BleMod() : serverUUID(padStringToUUID(stringToHex("WLED"))),
+             charUUID(padStringToUUID(stringToHex("WLED01"))) {}
 
-String padStringToUUID(const String& str) {
+  void setSleep(bool requestWake)
+  {
+#ifdef USERMOD_SLEEP
+    gettimeofday(&change_time, NULL);
+    modules["ble"] = requestWake;
+#endif
+  }
+
+  String padStringToUUID(const String &str)
+  {
     String paddedStr = str;
-    while (paddedStr.length() < 32) {
-        paddedStr += "0";
+    while (paddedStr.length() < 32)
+    {
+      paddedStr += "0";
     }
 
     // Insert hyphens at appropriate positions
@@ -26,21 +36,22 @@ String padStringToUUID(const String& str) {
                 paddedStr.substring(20);
 
     return paddedStr;
-}
-
-
-String stringToHex(const String& str) {
-  String hexString;
-  for (char c : str) {
-    char buf[3];
-    sprintf(buf, "%02X", static_cast<unsigned char>(c));
-    hexString += buf;
   }
-  return hexString;
-}
 
+  String stringToHex(const String &str)
+  {
+    String hexString;
+    for (char c : str)
+    {
+      char buf[3];
+      sprintf(buf, "%02X", static_cast<unsigned char>(c));
+      hexString += buf;
+    }
+    return hexString;
+  }
+};
 
-class ServerCallbacks : public NimBLEServerCallbacks
+class ServerCallbacks : public NimBLEServerCallbacks,BleMod
 {
   void onConnect(NimBLEServer *pServer)
   {
@@ -94,7 +105,7 @@ class ServerCallbacks : public NimBLEServerCallbacks
 };
 
 /** Handler class for characteristic actions */
-class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
+class CharacteristicCallbacks : public NimBLECharacteristicCallbacks,BleMod
 {
   void onRead(NimBLECharacteristic *pCharacteristic)
   {
@@ -163,10 +174,10 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
   {
     if (pServer->getConnectedCount())
     {
-      NimBLEService *pSvc = pServer->getServiceByUUID("DEAD");
+      NimBLEService *pSvc = pServer->getServiceByUUID(serverUUID.c_str());
       if (pSvc)
       {
-        NimBLECharacteristic *pChr = pSvc->getCharacteristic("BEEF");
+        NimBLECharacteristic *pChr = pSvc->getCharacteristic(charUUID.c_str());
         if (pChr)
         {
           pChr->setValue(getState());
@@ -179,17 +190,10 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
   }
 };
 
-class BleGattApiServer : public Usermod
+class BleGattApiServer : public Usermod, BleMod
 {
 
 public:
-  String serverUUID;
-  String charUUID;
-
-
-    BleGattApiServer() : serverUUID(padStringToUUID(stringToHex("WLED"))),
-                         charUUID(padStringToUUID(stringToHex("WLED01"))) {}
-
   virtual void setup()
   {
     if (!bleOpen)
@@ -197,6 +201,9 @@ public:
       DEBUG_PRINTLN("ble server closed!");
       return;
     }
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+              { request->send(200, "text/plain", "Hello, World!"); });
+    server.begin();
     DEBUG_PRINTLN("Starting NimBLE Server");
     if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
     {
