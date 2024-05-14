@@ -53,7 +53,8 @@ void onMqttConnect(bool sessionPresent)
 
 
 void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
-
+  static char *payloadStr;
+  
   DEBUG_PRINT(F("MQTT msg: "));
   DEBUG_PRINTLN(topic);
 
