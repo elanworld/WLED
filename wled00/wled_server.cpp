@@ -274,6 +274,7 @@ void initServer()
   
 
   server.on("/language.js", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (handleIfNoneMatchCacheHeader(request)) return;
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", languageJs, languageJs_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -281,6 +282,7 @@ void initServer()
   });
   
   server.on("/language_local.js", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (handleIfNoneMatchCacheHeader(request)) return;
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", languageLocalJs, languageLocalJs_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -405,7 +407,12 @@ void serveIndexOrWelcome(AsyncWebServerRequest *request)
 bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest* request)
 {
   AsyncWebHeader* header = request->getHeader("If-None-Match");
-  if (header && header->value() == String(VERSION)) {
+  char tmp[12];
+  sprintf_P(tmp, PSTR("%7d-%02x"), VERSION, cacheInvalidate);
+  DEBUG_PRINTLN(String(tmp));
+  DEBUG_PRINTLN(header->value());
+  DEBUG_PRINTLN(header && header->value() == String(tmp));
+  if (header && header->value() == String(tmp)) {
     request->send(304);
     return true;
   }
@@ -423,7 +430,7 @@ void setStaticContentCacheHeaders(AsyncWebServerResponse *response)
   #else
   response->addHeader(F("Cache-Control"),"no-store,max-age=0"); // prevent caching if debug build
   #endif
-  sprintf_P(tmp, PSTR("%8d-%02x"), VERSION, cacheInvalidate);
+  sprintf_P(tmp, PSTR("%7d-%02x"), VERSION, cacheInvalidate);
   response->addHeader(F("ETag"), tmp);
 }
 
