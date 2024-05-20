@@ -437,7 +437,6 @@ bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest* request)
   char tmp[12];
   sprintf_P(tmp, PSTR("%7d-%02x"), VERSION, cacheInvalidate);
   DEBUG_PRINTLN(String(tmp));
-  DEBUG_PRINTLN(header->value());
   DEBUG_PRINTLN(header && header->value() == String(tmp));
   if (header && header->value() == String(tmp)) {
     request->send(304);
