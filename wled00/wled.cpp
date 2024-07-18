@@ -874,7 +874,6 @@ void WLED::handleConnection()
       initConnection();
     }
     if (!apActive && now - lastReconnectAttempt > 12000 && (!wasConnected || apBehavior == AP_BEHAVIOR_NO_CONN)) {
-      DEBUG_PRINTLN(F("Not connected AP."));
       initAP();
     }
   } else if (!interfacesInited) { //newly connected
