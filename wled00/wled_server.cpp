@@ -271,6 +271,7 @@ void initServer()
     request->send(response);
   });
 
+#ifdef USERMOD_LANGUAGE
   server.on("/language.js", HTTP_GET, [](AsyncWebServerRequest *request){
     if (handleIfNoneMatchCacheHeader(request)) return;
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", languageJs, languageJs_length);
@@ -286,6 +287,7 @@ void initServer()
     setStaticContentCacheHeaders(response);
     request->send(response);
   });
+#endif
 
   server.on(SET_F("/rangetouch.js"), HTTP_GET, [](AsyncWebServerRequest *request){
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", rangetouchJs, rangetouchJs_length);
