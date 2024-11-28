@@ -5,15 +5,14 @@
 #include "esp_pm.h"
 #include <map>
 
-static int boot_ide_sec = 20; // 启动后等待时间
-static int wait_user_sec = 20; // 可以睡眠后等待用户的时间
-
-static std::map<int, int> config_sleep_time = {
-    {60, 20},
-    {300, 40},
-    {600, 60},
-    {3600, 300},
-};
+boolean sleepOnIdle = false;
+int voltagePin = 34;
+float voltageThreshold = 0.2;
+unsigned long voltageCheckInterval = 5000;
+unsigned long lastVoltageCheckTime = 0;
+float voltage;
+unsigned long lastLedOffTime = 0;
+unsigned long idleWaitSeconds = 60;
 
 class SleepManager : public Usermod
 {
@@ -24,15 +23,6 @@ public:
         {
             return;
         }
-        
-        DEBUG_PRINTF("change_time %ds %ldus\n",int(change_time.tv_sec), change_time.tv_usec);
-
-        esp_pm_config_esp32_t pmConfig;
-        pmConfig.max_freq_mhz = 240;
-        pmConfig.min_freq_mhz = 80;
-        pmConfig.light_sleep_enable = true;
-        ESP_ERROR_CHECK(esp_pm_configure(&pmConfig));
-        DEBUG_PRINTF("esp_pm_configure\n");
     }
 
     virtual void loop()
@@ -41,67 +31,114 @@ public:
         {
             return;
         }
-        if (false && millis() > boot_ide_sec * 1000 && shouldEnterSleep() && getCurrentTimeInSeconds() > wait_user_sec && bri == 0)
-        {
-            DEBUG_PRINTF("change_time duration %ds\n", getCurrentTimeInSeconds());
-            // Enable wakeup from deep sleep by rtc timer
-            const int wakeup_time_sec = getNextSleepTime();
-            DEBUG_PRINTF("Enabling timer wakeup, %ds\n", wakeup_time_sec);
-            ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(wakeup_time_sec * 1000000));
-            // enter deep sleep
-            esp_deep_sleep_start();
-        }
-    }
+        unsigned long currentMillis = millis();
 
-    // 获取下一个睡眠时间
-    int getNextSleepTime() const
-    {
-        int currentTime = getCurrentTimeInSeconds();
-        for (const auto& entry : config_sleep_time)
+        // 每隔 voltageCheckInterval 时间检测一次电压
+        if (currentMillis - lastVoltageCheckTime >= voltageCheckInterval)
         {
-            if (currentTime < entry.first)
+            if (sleepOnIdle && lastLedOffTime != 0 && currentMillis - lastLedOffTime > idleWaitSeconds * 1000)
             {
-                return entry.second;
+                DEBUG_PRINTLN("sleep on idle...");
+                startDeepSeelp();
+            }
+            lastVoltageCheckTime = currentMillis;
+
+            // 读取当前电压值
+            float voltage = readVoltage();
+
+            // 打印当前电压
+            DEBUG_PRINTF("Current voltage on IO%d: %.3f\n", voltagePin, voltage);
+
+            // 检查电压是否低于阈值
+            if (voltage < voltageThreshold)
+            {
+                if (voltage == 0)
+                {
+                    DEBUG_PRINTLN("Voltage is zoro");
+                }
+                else
+                {
+                    DEBUG_PRINTLN("Voltage is below threshold. Entering deep sleep...");
+                    startDeepSeelp();
+                }
             }
         }
-        // 如果当前时间大于配置的最大时间，返回最后一个配置的睡眠时间
-        return config_sleep_time.rbegin()->second;
     }
 
-    // 获取当前时间和change_time的差异
-    int getCurrentTimeInSeconds() const
+    virtual void onStateChange(uint8_t mode)
     {
-        struct timeval currentTime;
-        gettimeofday(&currentTime, NULL);
-        return static_cast<int>(currentTime.tv_sec - change_time.tv_sec);
+        DEBUG_PRINTF("current bri value: %d\n", bri);
+        if (bri == 0)
+        {
+            lastLedOffTime = millis();
+        }
+        else
+        {
+            lastLedOffTime = 0;
+        }
+    }
+
+    void startDeepSeelp()
+    {
+        briLast = bri;
+        bri = 0;
+        stateUpdated(CALL_MODE_DIRECT_CHANGE);
+        gpio_pulldown_dis(GPIO_NUM_0); // 确保没有内部上拉
+        gpio_pullup_en(GPIO_NUM_0);
+        delay(1000); // wati votage restore ...
+        ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
+        esp_deep_sleep_start();
+    }
+
+    // 电压检测函数
+    float readVoltage()
+    {
+        int adcValue = analogRead(voltagePin);
+        float voltageOut = (adcValue / float(4095)) * 3.3;
+        return voltageOut;
     }
 
     // 检查所有模块是否都不需要唤醒
-    bool shouldEnterSleep() const
+    bool checkWakeupLock() const
     {
-        for (const auto& pair : modules)
+        for (const auto &pair : modules)
         {
             if (pair.second)
             {
                 // 如果有一个模块需要唤醒，返回false
-                return false;
+                return true;
             }
         }
         // 所有模块都不需要唤醒
-        return true;
+        return false;
     }
 
+    // 在config中添加新选项
     virtual void addToConfig(JsonObject &root)
     {
-      JsonObject top = root.createNestedObject("SleepModule");
-      top["enableSleep"] = enableSleep;
+        JsonObject top = root.createNestedObject("Sleep Module");
+        top["enable Sleep"] = enableSleep;
+        top["voltage Pin"] = voltagePin;                      // 电压检测引脚
+        top["voltage Threshold"] = voltageThreshold;          // 电压阈值
+        top["voltage Check Interval"] = voltageCheckInterval; // 电压检测间隔
+        top["voltage Current"] = readVoltage();
+        top["sleep On Idle"] = sleepOnIdle;
+        top["idle Wait Seconds"] = idleWaitSeconds;
     }
+
+    // 从config读取设置
     virtual bool readFromConfig(JsonObject &root)
     {
-      JsonObject top = root["SleepModule"];
-      bool configComplete = !top.isNull();
-      configComplete &= getJsonValue(top["enableSleep"], enableSleep);
-      return configComplete;
+        JsonObject top = root["Sleep Module"];
+        bool configComplete = !top.isNull();
+        configComplete &= getJsonValue(top["enable Sleep"], enableSleep);
+        configComplete &= getJsonValue(top["voltage Pin"], voltagePin);
+        configComplete &= getJsonValue(top["voltage Threshold"], voltageThreshold);
+        configComplete &= getJsonValue(top["voltage Check Interval"], voltageCheckInterval);
+        configComplete &= getJsonValue(top["voltage Current"], voltage);
+        configComplete &= getJsonValue(top["sleep On Idle"], sleepOnIdle);
+        configComplete &= getJsonValue(top["idle Wait Seconds"], idleWaitSeconds);
+        return configComplete;
     }
 };
 
