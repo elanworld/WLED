@@ -13,6 +13,8 @@ unsigned long lastVoltageCheckTime = 0;
 float voltage;
 unsigned long lastLedOffTime = 0;
 unsigned long idleWaitSeconds = 60;
+bool isTestingBattery = false;
+bool sleepNextLoop = false;
 
 class SleepManager : public Usermod
 {
@@ -36,10 +38,15 @@ public:
         // 每隔 voltageCheckInterval 时间检测一次电压
         if (currentMillis - lastVoltageCheckTime >= voltageCheckInterval)
         {
-            if (sleepOnIdle && lastLedOffTime != 0 && currentMillis - lastLedOffTime > idleWaitSeconds * 1000)
+            if (sleepNextLoop)
+            {
+                startDeepSeelp(true);
+            }
+
+            if (sleepOnIdle && lastLedOffTime != 0 && currentMillis - lastLedOffTime > idleWaitSeconds * 1000 && !haveWakeupLock())
             {
                 DEBUG_PRINTLN("sleep on idle...");
-                startDeepSeelp();
+                startDeepSeelp(false);
             }
             lastVoltageCheckTime = currentMillis;
 
@@ -48,6 +55,11 @@ public:
 
             // 打印当前电压
             DEBUG_PRINTF("Current voltage on IO%d: %.3f\n", voltagePin, voltage);
+            if (isTestingBattery)
+            {
+                voltageThreshold = voltage;
+                serializeConfig();
+            }
 
             // 检查电压是否低于阈值
             if (voltage < voltageThreshold)
@@ -59,7 +71,7 @@ public:
                 else
                 {
                     DEBUG_PRINTLN("Voltage is below threshold. Entering deep sleep...");
-                    startDeepSeelp();
+                    startDeepSeelp(false);
                 }
             }
         }
@@ -78,16 +90,24 @@ public:
         }
     }
 
-    void startDeepSeelp()
+    void startDeepSeelp(bool immediate)
     {
-        briLast = bri;
-        bri = 0;
-        stateUpdated(CALL_MODE_DIRECT_CHANGE);
-        gpio_pulldown_dis(GPIO_NUM_0); // 确保没有内部上拉
-        gpio_pullup_en(GPIO_NUM_0);
-        delay(1000); // wati votage restore ...
-        ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
-        esp_deep_sleep_start();
+        if (immediate)
+        {
+            DEBUG_PRINTLN("Entering deep sleep...");
+            gpio_pulldown_dis(GPIO_NUM_0); // 确保没有内部上拉
+            gpio_pullup_en(GPIO_NUM_0);
+            delay(2000); // wati votage restore ...
+            ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
+            esp_deep_sleep_start();
+        }
+        else
+        {
+            sleepNextLoop = true;
+            briLast = bri;
+            bri = 0;
+            stateUpdated(CALL_MODE_DIRECT_CHANGE);
+        }
     }
 
     // 电压检测函数
@@ -99,7 +119,7 @@ public:
     }
 
     // 检查所有模块是否都不需要唤醒
-    bool checkWakeupLock() const
+    bool haveWakeupLock() const
     {
         for (const auto &pair : modules)
         {
@@ -124,6 +144,7 @@ public:
         top["voltage Current"] = readVoltage();
         top["sleep On Idle"] = sleepOnIdle;
         top["idle Wait Seconds"] = idleWaitSeconds;
+        top["battery Test Enabled"] = false;
     }
 
     // 从config读取设置
@@ -138,6 +159,7 @@ public:
         configComplete &= getJsonValue(top["voltage Current"], voltage);
         configComplete &= getJsonValue(top["sleep On Idle"], sleepOnIdle);
         configComplete &= getJsonValue(top["idle Wait Seconds"], idleWaitSeconds);
+        configComplete &= getJsonValue(top["battery Test Enabled"], isTestingBattery);
         return configComplete;
     }
 };
