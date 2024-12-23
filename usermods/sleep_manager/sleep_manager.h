@@ -21,6 +21,15 @@ class SleepManager : public Usermod
 public:
     virtual void setup()
     {
+        gpio_pulldown_dis(GPIO_NUM_25); // turn on element
+        gpio_pulldown_dis(GPIO_NUM_26);
+        gpio_pulldown_dis(GPIO_NUM_27);
+        gpio_pullup_dis(GPIO_NUM_25);
+        gpio_pullup_dis(GPIO_NUM_26);
+        gpio_pullup_dis(GPIO_NUM_27);
+        ESP_ERROR_CHECK(gpio_pulldown_en(GPIO_NUM_25));
+        ESP_ERROR_CHECK(gpio_pulldown_en(GPIO_NUM_26));
+        ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_27));
         if (!enableSleep)
         {
             return;
@@ -95,10 +104,21 @@ public:
         if (immediate)
         {
             DEBUG_PRINTLN("Entering deep sleep...");
+            gpio_pulldown_dis(GPIO_NUM_25); // turn off element
+            gpio_pulldown_dis(GPIO_NUM_26);
+            gpio_pulldown_dis(GPIO_NUM_27);
+            gpio_pullup_dis(GPIO_NUM_25);
+            gpio_pullup_dis(GPIO_NUM_26);
+            gpio_pullup_dis(GPIO_NUM_27);
+            ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_25));
+            ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_26));
+            ESP_ERROR_CHECK(gpio_pulldown_en(GPIO_NUM_27));
             gpio_pulldown_dis(GPIO_NUM_0); // 确保没有内部上拉
             gpio_pullup_en(GPIO_NUM_0);
             delay(2000); // wati votage restore ...
+#ifndef ARDUINO_ARCH_ESP32C3
             ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
+#endif
             esp_deep_sleep_start();
         }
         else
