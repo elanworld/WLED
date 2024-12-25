@@ -1,39 +1,30 @@
-#ifndef SLEEP_MANAGER
-#define SLEEP_MANAGER
+#ifndef SLEEP_MANAGER_H
+#define SLEEP_MANAGER_H
 
 #include "wled.h"
 #include "esp_pm.h"
 #include <map>
-
-boolean sleepOnIdle = false;
-int voltagePin = 34;
-float voltageThreshold = 0.2;
-unsigned long voltageCheckInterval = 5000;
-unsigned long lastVoltageCheckTime = 0;
-float voltage;
-unsigned long lastLedOffTime = 0;
-unsigned long idleWaitSeconds = 60;
-bool isTestingBattery = false;
-bool sleepNextLoop = false;
-
 class SleepManager : public Usermod
 {
+private:
+    boolean sleepOnIdle = false;
+    int voltagePin = 34;
+    float voltageThreshold = 0.2;
+    unsigned long voltageCheckInterval = 5000;
+    unsigned long lastVoltageCheckTime = 0;
+    float voltage;
+    unsigned long lastLedOffTime = 0;
+    unsigned long idleWaitSeconds = 60;
+    bool isTestingBattery = false;
+    bool sleepNextLoop = false;
+
 public:
     virtual void setup()
     {
-        gpio_pulldown_dis(GPIO_NUM_25); // turn on element
-        gpio_pulldown_dis(GPIO_NUM_26);
-        gpio_pulldown_dis(GPIO_NUM_27);
-        gpio_pullup_dis(GPIO_NUM_25);
-        gpio_pullup_dis(GPIO_NUM_26);
-        gpio_pullup_dis(GPIO_NUM_27);
-        ESP_ERROR_CHECK(gpio_pulldown_en(GPIO_NUM_25));
-        ESP_ERROR_CHECK(gpio_pulldown_en(GPIO_NUM_26));
-        ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_27));
-        if (!enableSleep)
-        {
-            return;
-        }
+            int gpioPinsDown[] = {25,26};
+            pull_up_down(gpioPinsDown,sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]),false,true);
+            int gpioPinsup[] = {27};
+            pull_up_down(gpioPinsup,sizeof(gpioPinsup) / sizeof(gpioPinsup[0]),true,false);
     }
 
     virtual void loop()
@@ -88,7 +79,7 @@ public:
 
     virtual void onStateChange(uint8_t mode)
     {
-        DEBUG_PRINTF("current bri value: %d\n", bri);
+        DEBUG_PRINTF("current bri value: %d,effect: %d\n", bri, effectCurrent);
         if (bri == 0)
         {
             lastLedOffTime = millis();
@@ -104,18 +95,15 @@ public:
         if (immediate)
         {
             DEBUG_PRINTLN("Entering deep sleep...");
-            gpio_pulldown_dis(GPIO_NUM_25); // turn off element
-            gpio_pulldown_dis(GPIO_NUM_26);
-            gpio_pulldown_dis(GPIO_NUM_27);
-            gpio_pullup_dis(GPIO_NUM_25);
-            gpio_pullup_dis(GPIO_NUM_26);
-            gpio_pullup_dis(GPIO_NUM_27);
-            ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_25));
-            ESP_ERROR_CHECK(gpio_pullup_en(GPIO_NUM_26));
-            ESP_ERROR_CHECK(gpio_pulldown_en(GPIO_NUM_27));
-            gpio_pulldown_dis(GPIO_NUM_0); // 确保没有内部上拉
-            gpio_pullup_en(GPIO_NUM_0);
-            delay(2000); // wati votage restore ...
+            int gpioPins[] = {2, 4, 5, 12, 13, 14, 16, 17, 18};
+            pull_up_down(gpioPins,sizeof(gpioPins) / sizeof(gpioPins[0]),false,false);
+            int gpioPinsDown[] = {27};
+            pull_up_down(gpioPinsDown,sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]),false,true);
+            int gpioPinsup[] = {26,25};
+            pull_up_down(gpioPinsup,sizeof(gpioPinsup) / sizeof(gpioPinsup[0]),true,false);
+            WiFi.disconnect();
+            WiFi.mode(WIFI_OFF);
+            delay(2000); // wati gpio level restore ...
 #ifndef ARDUINO_ARCH_ESP32C3
             ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
 #endif
@@ -127,6 +115,24 @@ public:
             briLast = bri;
             bri = 0;
             stateUpdated(CALL_MODE_DIRECT_CHANGE);
+        }
+    }
+
+    void pull_up_down(int gpioPins[], int numPins, bool up, bool down)
+    {
+        for (int i = 0; i < numPins; i++)
+        {
+            gpio_set_direction((gpio_num_t)gpioPins[i], GPIO_MODE_INPUT); // 设置为输入模式（高阻态）
+            gpio_pullup_dis((gpio_num_t)gpioPins[i]);                     // 禁用上拉电阻
+            gpio_pulldown_dis((gpio_num_t)gpioPins[i]);                   // 禁用下拉电阻
+            if (up)
+            {
+                ESP_ERROR_CHECK(gpio_pullup_en((gpio_num_t)gpioPins[i]));
+            }
+            if (down)
+            {
+                ESP_ERROR_CHECK(gpio_pulldown_en((gpio_num_t)gpioPins[i]));
+            }
         }
     }
 
@@ -161,7 +167,7 @@ public:
         top["voltage Pin"] = voltagePin;                      // 电压检测引脚
         top["voltage Threshold"] = voltageThreshold;          // 电压阈值
         top["voltage Check Interval"] = voltageCheckInterval; // 电压检测间隔
-        top["voltage Current"] = readVoltage();
+        top["voltage"] = readVoltage();
         top["sleep On Idle"] = sleepOnIdle;
         top["idle Wait Seconds"] = idleWaitSeconds;
         top["battery Test Enabled"] = false;
@@ -176,7 +182,7 @@ public:
         configComplete &= getJsonValue(top["voltage Pin"], voltagePin);
         configComplete &= getJsonValue(top["voltage Threshold"], voltageThreshold);
         configComplete &= getJsonValue(top["voltage Check Interval"], voltageCheckInterval);
-        configComplete &= getJsonValue(top["voltage Current"], voltage);
+        configComplete &= getJsonValue(top["voltage"], voltage);
         configComplete &= getJsonValue(top["sleep On Idle"], sleepOnIdle);
         configComplete &= getJsonValue(top["idle Wait Seconds"], idleWaitSeconds);
         configComplete &= getJsonValue(top["battery Test Enabled"], isTestingBattery);

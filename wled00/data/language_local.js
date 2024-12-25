@@ -545,7 +545,7 @@ function translateText(ele) {
       "Voltage Pin": "电压引脚",
       "Voltage Threshold": "电压阈值",
       "Voltage Check Interval": "电压检查间隔",
-      "Voltage Current": "电压电流",
+      "Voltage": "电压",
       "Sleep On Idle": "空闲时睡眠",
       "Idle Wait Seconds": "空闲等待秒数",
       "Battery Test Enabled": "启用电池测试",

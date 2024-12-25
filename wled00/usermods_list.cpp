@@ -24,6 +24,9 @@
 #ifdef USERMOD_SLEEP
 #include "../usermods/sleep_manager/sleep_manager.h"
 #endif
+#ifdef USERMOD_BUTTONSENSOR
+#include "../usermods/button_sensor/button_sensor.h"
+#endif
 
 #ifdef USERMOD_BATTERY
   #include "../usermods/Battery/usermod_v2_Battery.h"
@@ -415,5 +418,8 @@ void registerUsermods()
   #endif
   #ifdef USERMOD_SLEEP
   usermods.add(new SleepManager());
+  #endif
+  #ifdef USERMOD_BUTTONSENSOR
+  usermods.add(new ButtonSensorUsermod());
   #endif
 }
