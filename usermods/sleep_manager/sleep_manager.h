@@ -9,22 +9,28 @@ class SleepManager : public Usermod
 private:
     boolean sleepOnIdle = false;
     int voltagePin = 34;
-    float voltageThreshold = 0.2;
-    unsigned long voltageCheckInterval = 5000;
+    unsigned long voltageCheckInterval = 5;
     unsigned long lastVoltageCheckTime = 0;
     float voltage;
     unsigned long lastLedOffTime = 0;
     unsigned long idleWaitSeconds = 60;
     bool isTestingBattery = false;
     bool sleepNextLoop = false;
+    float minVoltage = 3.0;      // 最低电压（例如：3.0V）
+    float maxVoltage = 4.2;      // 最高电压（例如：4.2V）
+    float voltageDivRatio = 2.0; // 分压比，用于电池电压检测
+
+    // 当前电压值
+    float currentVoltage = 0.0;
 
 public:
     virtual void setup()
     {
-            int gpioPinsDown[] = {25,26};
-            pull_up_down(gpioPinsDown,sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]),false,true);
-            int gpioPinsup[] = {27};
-            pull_up_down(gpioPinsup,sizeof(gpioPinsup) / sizeof(gpioPinsup[0]),true,false);
+        int gpioPinsDown[] = {25, 26};
+        pull_up_down(gpioPinsDown, sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]), false, true);
+        int gpioPinsup[] = {27};
+        pull_up_down(gpioPinsup, sizeof(gpioPinsup) / sizeof(gpioPinsup[0]), true, false);
+        pinManager.allocatePin(voltagePin, false, PinOwner::Button);
     }
 
     virtual void loop()
@@ -36,7 +42,7 @@ public:
         unsigned long currentMillis = millis();
 
         // 每隔 voltageCheckInterval 时间检测一次电压
-        if (currentMillis - lastVoltageCheckTime >= voltageCheckInterval)
+        if (currentMillis - lastVoltageCheckTime >= voltageCheckInterval * 1000)
         {
             if (sleepNextLoop)
             {
@@ -51,24 +57,20 @@ public:
             lastVoltageCheckTime = currentMillis;
 
             // 读取当前电压值
-            float voltage = readVoltage();
+            float voltage = readVoltage() * voltageDivRatio;
 
             // 打印当前电压
             DEBUG_PRINTF("Current voltage on IO%d: %.3f\n", voltagePin, voltage);
             if (isTestingBattery)
             {
-                voltageThreshold = voltage;
+                minVoltage = voltage;
                 serializeConfig();
             }
 
             // 检查电压是否低于阈值
-            if (voltage < voltageThreshold)
+            if (voltage < minVoltage)
             {
-                if (voltage == 0)
-                {
-                    DEBUG_PRINTLN("Voltage is zoro");
-                }
-                else
+                if (voltage != 0)
                 {
                     DEBUG_PRINTLN("Voltage is below threshold. Entering deep sleep...");
                     startDeepSeelp(false);
@@ -96,11 +98,11 @@ public:
         {
             DEBUG_PRINTLN("Entering deep sleep...");
             int gpioPins[] = {2, 4, 5, 12, 13, 14, 16, 17, 18};
-            pull_up_down(gpioPins,sizeof(gpioPins) / sizeof(gpioPins[0]),false,false);
+            pull_up_down(gpioPins, sizeof(gpioPins) / sizeof(gpioPins[0]), false, false);
             int gpioPinsDown[] = {27};
-            pull_up_down(gpioPinsDown,sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]),false,true);
-            int gpioPinsup[] = {26,25};
-            pull_up_down(gpioPinsup,sizeof(gpioPinsup) / sizeof(gpioPinsup[0]),true,false);
+            pull_up_down(gpioPinsDown, sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]), false, true);
+            int gpioPinsup[] = {26, 25};
+            pull_up_down(gpioPinsup, sizeof(gpioPinsup) / sizeof(gpioPinsup[0]), true, false);
             WiFi.disconnect();
             WiFi.mode(WIFI_OFF);
             delay(2000); // wati gpio level restore ...
@@ -159,35 +161,77 @@ public:
         return false;
     }
 
-    // 在config中添加新选项
-    virtual void addToConfig(JsonObject &root)
+    // 展示电压信息的函数
+    void addToJsonInfo(JsonObject &root)
+    {
+        JsonObject user = root["u"];
+        if (user.isNull())
+            user = root.createNestedObject("u");
+
+        // 获取电压值
+        currentVoltage = readVoltage();
+
+        // 计算电压百分比
+        float batteryPercentage = calculateBatteryPercentage(currentVoltage * voltageDivRatio);
+
+        // 将电压信息添加到 JSON 对象
+        JsonArray percentage = user.createNestedArray(F("Battery Percentage"));
+        JsonArray voltage = user.createNestedArray(F("Current Voltage"));
+        percentage.add(batteryPercentage);
+        percentage.add(F(" %"));
+        voltage.add(round(currentVoltage * voltageDivRatio * 100.0) / 100.0);
+        voltage.add(F(" V"));
+    }
+
+    // 在配置中添加电压相关配置
+    void addToConfig(JsonObject &root)
     {
         JsonObject top = root.createNestedObject("Sleep Module");
+
+        // 添加电压相关配置项
         top["enable Sleep"] = enableSleep;
-        top["voltage Pin"] = voltagePin;                      // 电压检测引脚
-        top["voltage Threshold"] = voltageThreshold;          // 电压阈值
         top["voltage Check Interval"] = voltageCheckInterval; // 电压检测间隔
-        top["voltage"] = readVoltage();
+        top["voltage Pin"] = voltagePin;                      // 电压检测引脚
+        top["Min Voltage"] = minVoltage;
+        top["Max Voltage"] = maxVoltage;
+        top["Voltage Div Ratio"] = voltageDivRatio;
         top["sleep On Idle"] = sleepOnIdle;
         top["idle Wait Seconds"] = idleWaitSeconds;
         top["battery Test Enabled"] = false;
     }
 
-    // 从config读取设置
-    virtual bool readFromConfig(JsonObject &root)
+    // 从配置中读取电压相关配置
+    bool readFromConfig(JsonObject &root)
     {
         JsonObject top = root["Sleep Module"];
         bool configComplete = !top.isNull();
+
+        // 读取电压相关配置项
         configComplete &= getJsonValue(top["enable Sleep"], enableSleep);
-        configComplete &= getJsonValue(top["voltage Pin"], voltagePin);
-        configComplete &= getJsonValue(top["voltage Threshold"], voltageThreshold);
         configComplete &= getJsonValue(top["voltage Check Interval"], voltageCheckInterval);
-        configComplete &= getJsonValue(top["voltage"], voltage);
+        configComplete &= getJsonValue(top["voltage Pin"], voltagePin);
+        configComplete &= getJsonValue(top["Min Voltage"], minVoltage);
+        configComplete &= getJsonValue(top["Max Voltage"], maxVoltage);
+        configComplete &= getJsonValue(top["Voltage Div Ratio"], voltageDivRatio);
         configComplete &= getJsonValue(top["sleep On Idle"], sleepOnIdle);
         configComplete &= getJsonValue(top["idle Wait Seconds"], idleWaitSeconds);
         configComplete &= getJsonValue(top["battery Test Enabled"], isTestingBattery);
+
         return configComplete;
     }
+    // 计算电压百分比
+    int calculateBatteryPercentage(float voltage)
+    {
+        int percent = (voltage - minVoltage) / (maxVoltage - minVoltage) * 100.0;
+        if (percent < 0)
+        {
+            percent = 0;
+        }
+        if (percent > 100)
+        {
+            percent = 100;
+        }
+        return percent;
+    }
 };
-
 #endif
