@@ -520,7 +520,6 @@ function translateText(ele) {
       "(leave empty for no Quick load button)": "（留空则不显示快速加载按钮）",
       // usermod_*.htm
       "language": "语言",
-      "UseLocalTranslation": "使用翻译",
       "LanguageJsUrl": "语言翻译脚本",
       "Bluetooth": "蓝牙",
       "BleOpen": "打开蓝牙接口",
@@ -538,7 +537,6 @@ function translateText(ele) {
       "Filesystem": "文件系统",
       "Environment": "环境",
       "language": "语言",
-      "UseLocalTranslation": "使用本地翻译",
       "LanguageJsUrl": "语言 JS 地址",
       "Sleep Module": "睡眠模块",
       "Enable Sleep": "启用睡眠",
@@ -549,6 +547,14 @@ function translateText(ele) {
       "Sleep On Idle": "空闲时睡眠",
       "Idle Wait Seconds": "空闲等待秒数",
       "Battery Test Enabled": "启用电池测试",
+      "Min Voltage": "最低电压",
+      "Max Voltage": "最高电压",
+      "Voltage Div Ratio": "分压比",
+      "Switch Boot Partition": "切换启动分区",
+      "Shake Sensor": "震动传感器",
+      "Enable": "启用",
+      "Sensor Pin": "传感器引脚",
+      "Pull Up": "拉高",
 
   };
 

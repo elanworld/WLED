@@ -4,6 +4,10 @@
 #include "wled.h"
 #include "esp_pm.h"
 #include <map>
+#include "esp_partition.h"
+#include "esp_system.h"
+#include "esp_ota_ops.h"
+
 class SleepManager : public Usermod
 {
 private:
@@ -19,6 +23,7 @@ private:
     float minVoltage = 3.0;      // 最低电压（例如：3.0V）
     float maxVoltage = 4.2;      // 最高电压（例如：4.2V）
     float voltageDivRatio = 2.0; // 分压比，用于电池电压检测
+    bool nextBootSwap = false;   // 分压比，用于电池电压检测
 
     // 当前电压值
     float currentVoltage = 0.0;
@@ -77,6 +82,10 @@ public:
                 }
             }
         }
+        if (nextBootSwap)
+        {
+            switch_to_another_partition();
+        }
     }
 
     virtual void onStateChange(uint8_t mode)
@@ -92,14 +101,56 @@ public:
         }
     }
 
+    void switch_to_another_partition()
+    {
+        // 获取当前正在运行的分区
+        const esp_partition_t *running_partition = esp_ota_get_running_partition();
+        const esp_partition_t *next_partition = NULL;
+
+        // 判断当前是哪个应用分区，选择下一个分区
+        if (strcmp(running_partition->label, "app0") == 0)
+        {
+            next_partition = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+        }
+        else
+        {
+            next_partition = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
+        }
+
+        if (next_partition == NULL)
+        {
+            DEBUG_PRINTLN("Next partition not found!");
+            return;
+        }
+
+        // 获取 otadata 分区
+        const esp_partition_t *otadata_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
+        if (otadata_partition == NULL)
+        {
+            DEBUG_PRINTLN("OTADATA partition not found!");
+            return;
+        }
+
+        // 设置下次启动的分区
+        esp_ota_set_boot_partition(next_partition);
+
+        DEBUG_PRINTF("Switching to partition: %s\n", next_partition->label);
+        WiFi.disconnect(); // 确保 Wi-Fi 处于断开状态
+        esp_wifi_stop();   // 停止 Wi-Fi 模块
+        delay(1000);
+        // 重启设备使更改生效
+        esp_wifi_stop();   // 停止 Wi-Fi 模块
+        esp_wifi_deinit(); // 去初始化 Wi-Fi 堆栈
+        esp_sleep_enable_timer_wakeup(1 * 1000000);
+        esp_deep_sleep_start();
+    }
+
     void startDeepSeelp(bool immediate)
     {
         if (immediate)
         {
             DEBUG_PRINTLN("Entering deep sleep...");
-            int gpioPins[] = {2, 4, 5, 12, 13, 14, 16, 17, 18};
-            pull_up_down(gpioPins, sizeof(gpioPins) / sizeof(gpioPins[0]), false, false);
-            int gpioPinsDown[] = {27};
+            int gpioPinsDown[] = {4, 27};
             pull_up_down(gpioPinsDown, sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]), false, true);
             int gpioPinsup[] = {26, 25};
             pull_up_down(gpioPinsup, sizeof(gpioPinsup) / sizeof(gpioPinsup[0]), true, false);
@@ -108,6 +159,7 @@ public:
             delay(2000); // wati gpio level restore ...
 #ifndef ARDUINO_ARCH_ESP32C3
             ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
+            // ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(1ULL << 0, ESP_EXT1_WAKEUP_ALL_LOW));
 #endif
             esp_deep_sleep_start();
         }
@@ -177,15 +229,21 @@ public:
         // 将电压信息添加到 JSON 对象
         JsonArray percentage = user.createNestedArray(F("Battery Percentage"));
         JsonArray voltage = user.createNestedArray(F("Current Voltage"));
+        JsonArray boot = user.createNestedArray(F("boot type"));
         percentage.add(batteryPercentage);
         percentage.add(F(" %"));
         voltage.add(round(currentVoltage * voltageDivRatio * 100.0) / 100.0);
         voltage.add(F(" V"));
+        // 检查唤醒原因
+        esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+        boot.add(F(wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED ? "reset" : wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 ? "sleep"
+                                                                                                                  : "other"));
     }
 
     // 在配置中添加电压相关配置
     void addToConfig(JsonObject &root)
     {
+        DEBUG_PRINTLN("sleep module addToConfig");
         JsonObject top = root.createNestedObject("Sleep Module");
 
         // 添加电压相关配置项
@@ -198,11 +256,13 @@ public:
         top["sleep On Idle"] = sleepOnIdle;
         top["idle Wait Seconds"] = idleWaitSeconds;
         top["battery Test Enabled"] = false;
+        top["Switch Boot Partition"] = false;
     }
 
     // 从配置中读取电压相关配置
     bool readFromConfig(JsonObject &root)
     {
+        DEBUG_PRINTLN("sleep module readFromConfig");
         JsonObject top = root["Sleep Module"];
         bool configComplete = !top.isNull();
 
@@ -216,6 +276,7 @@ public:
         configComplete &= getJsonValue(top["sleep On Idle"], sleepOnIdle);
         configComplete &= getJsonValue(top["idle Wait Seconds"], idleWaitSeconds);
         configComplete &= getJsonValue(top["battery Test Enabled"], isTestingBattery);
+        configComplete &= getJsonValue(top["Switch Boot Partition"], nextBootSwap);
 
         return configComplete;
     }
