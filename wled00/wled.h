@@ -526,7 +526,6 @@ WLED_GLOBAL bool wasConnected _INIT(false);
 
 // blutooth
 WLED_GLOBAL bool bleOpen _INIT(false);
-WLED_GLOBAL bool wifiOpen _INIT(true); // bluetooth and wifi cant be opened together
 
 // color
 WLED_GLOBAL byte lastRandomIndex _INIT(0);        // used to save last random color so the new one is not the same

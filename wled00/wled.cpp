@@ -794,11 +794,6 @@ void WLED::initInterfaces()
 
 void WLED::handleConnection()
 {
-  if (!wifiOpen)
-  {
-    return;
-  }
-  
   static byte stacO = 0;
   static uint32_t lastHeap = UINT32_MAX;
   static unsigned long heapTime = 0;

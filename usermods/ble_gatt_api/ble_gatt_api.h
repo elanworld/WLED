@@ -51,7 +51,7 @@ public:
   }
 };
 
-class ServerCallbacks : public NimBLEServerCallbacks,BleMod
+class ServerCallbacks : public NimBLEServerCallbacks, BleMod
 {
   void onConnect(NimBLEServer *pServer)
   {
@@ -105,7 +105,7 @@ class ServerCallbacks : public NimBLEServerCallbacks,BleMod
 };
 
 /** Handler class for characteristic actions */
-class CharacteristicCallbacks : public NimBLECharacteristicCallbacks,BleMod
+class CharacteristicCallbacks : public NimBLECharacteristicCallbacks, BleMod
 {
   void onRead(NimBLECharacteristic *pCharacteristic)
   {
@@ -202,6 +202,12 @@ public:
       return;
     }
     DEBUG_PRINTLN("Starting NimBLE Server");
+    if (noWifiSleep)
+    {
+      DEBUG_PRINTLN("please set wifi sleep for conexist in blue wifi");
+      return;
+    }
+
     if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
     {
       char bufn[15];
@@ -242,21 +248,12 @@ public:
   {
     JsonObject top = root.createNestedObject("Bluetooth");
     top["bleOpen"] = bleOpen;
-    top["wifiOpen"] = wifiOpen;
   }
   virtual bool readFromConfig(JsonObject &root)
   {
     JsonObject top = root["Bluetooth"];
     bool configComplete = !top.isNull();
     configComplete &= getJsonValue(top["bleOpen"], bleOpen);
-    configComplete &= getJsonValue(top["wifiOpen"], wifiOpen);
-    // board will crash if wifi bluetooth open togather
-    if (bleOpen == wifiOpen)
-    {
-      DEBUG_PRINTLN("readFromConfig: wifi open bluetooth close");
-      wifiOpen = true;
-      bleOpen = false;
-    }
     return configComplete;
   }
 };
