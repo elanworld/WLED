@@ -5,6 +5,15 @@
 #include "esp_pm.h"
 #include <map>
 #include "esp_system.h"
+#include <driver/touch_pad.h>
+#include <string>
+#ifndef WAKEUP_TOUCH_PIN
+#ifdef CONFIG_IDF_TARGET_ESP32S3 // ESP32S3
+#define WAKEUP_TOUCH_PIN 5
+#else
+#define WAKEUP_TOUCH_PIN 15
+#endif
+#endif //WAKEUP_TOUCH_PIN
 
 class SleepManager : public Usermod
 {
@@ -23,6 +32,7 @@ private:
     float voltageDivRatio = 2.0; // 分压比，用于电池电压检测
     // 当前电压值
     float currentVoltage = 0.0;
+    bool presetWakeup = true;
 
 public:
     virtual void setup()
@@ -98,22 +108,28 @@ public:
         if (immediate)
         {
             DEBUG_PRINTLN("Entering deep sleep...");
-            int nextWakeupMin = findNextTimerInterval() - 1;
-            if (nextWakeupMin > 0)
+            if (presetWakeup)
             {
-                esp_sleep_enable_timer_wakeup(nextWakeupMin * 60 * 1000000); // wakeup for preset
-                DEBUG_PRINTF("wakeup after %d minites\n", nextWakeupMin);
+                int nextWakeupMin = findNextTimerInterval() - 1;
+                if (nextWakeupMin > 0)
+                {
+                    esp_sleep_enable_timer_wakeup(nextWakeupMin * 60ULL * 1000000ULL); // wakeup for preset
+                    DEBUG_PRINTF("wakeup after %d minites", nextWakeupMin);
+                    DEBUG_PRINTLN("");
+                }
             }
             int gpioPinsDown[] = {4, 27};
             pull_up_down(gpioPinsDown, sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]), false, true);
-            int gpioPinsup[] = {26, 25};
+            int gpioPinsup[] = {0, 26, 25};
             pull_up_down(gpioPinsup, sizeof(gpioPinsup) / sizeof(gpioPinsup[0]), true, false);
             WiFi.disconnect();
             WiFi.mode(WIFI_OFF);
+            // 初始化触摸传感器
+            touchSleepWakeUpEnable(WAKEUP_TOUCH_PIN, touchThreshold);
+            ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, 0));
+            ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_0, ESP_EXT1_WAKEUP_ALL_LOW));
             delay(2000); // wati gpio level restore ...
 #ifndef ARDUINO_ARCH_ESP32C3
-            ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0));
-            // ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(1ULL << 0, ESP_EXT1_WAKEUP_ALL_LOW));
 #endif
             esp_deep_sleep_start();
         }
@@ -189,9 +205,7 @@ public:
         voltage.add(round(currentVoltage * voltageDivRatio * 100.0) / 100.0);
         voltage.add(F(" V"));
         // 检查唤醒原因
-        esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
-        boot.add(F(wakeup_reason == ESP_SLEEP_WAKEUP_UNDEFINED ? "reset" : wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 ? "sleep"
-                                                                                                                  : "other"));
+        boot.add(F(phase_wakeup_reason()));
     }
 
     // 在配置中添加电压相关配置
@@ -210,6 +224,7 @@ public:
         top["sleep On Idle"] = sleepOnIdle;
         top["idle Wait Seconds"] = idleWaitSeconds;
         top["battery Test Enabled"] = false;
+        top["preset Wakeup"] = presetWakeup;
     }
 
     // 从配置中读取电压相关配置
@@ -229,7 +244,7 @@ public:
         configComplete &= getJsonValue(top["sleep On Idle"], sleepOnIdle);
         configComplete &= getJsonValue(top["idle Wait Seconds"], idleWaitSeconds);
         configComplete &= getJsonValue(top["battery Test Enabled"], isTestingBattery);
-        configComplete &= getJsonValue(top["battery Test Enabled"], isTestingBattery);
+        configComplete &= getJsonValue(top["preset Wakeup"], presetWakeup);
 
         return configComplete;
     }
@@ -270,14 +285,18 @@ public:
 
         for (uint8_t i = 0; i < 8; i++)
         {
-            if (timerMacro[i] == 0)
+            if (!(timerMacro[i] != 0 && (timerWeekday[i] & 0x01)))
             {
                 continue; // 跳过未启用的定时器
             }
 
             for (int dayOffset = 0; dayOffset < 7; dayOffset++)
             {
-                int checkWeekday = (currentWeekday + dayOffset) % 7; // 计算未来的星期几
+                int checkWeekday = ((currentWeekday + dayOffset) % 7); // 计算未来的星期几 1-7
+                if (checkWeekday == 0)
+                {
+                    checkWeekday = 7;
+                }
 
                 if ((timerWeekday[i] >> (checkWeekday)) & 0x01)
                 {
@@ -304,6 +323,42 @@ public:
             }
         }
         return minDifference; // 返回分钟差
+    }
+    const char *phase_wakeup_reason()
+    {
+        static char reson[20]; // 使用 static 保证数组在函数外部依然有效
+        esp_sleep_wakeup_cause_t wakeup_reason;
+
+        wakeup_reason = esp_sleep_get_wakeup_cause();
+
+        switch (wakeup_reason)
+        {
+        case ESP_SLEEP_WAKEUP_EXT0:
+            Serial.println("Wakeup caused by external signal using RTC_IO");
+            strcpy(reson, "RTC_IO");
+            break;
+        case ESP_SLEEP_WAKEUP_EXT1:
+            Serial.println("Wakeup caused by external signal using RTC_CNTL");
+            strcpy(reson, "RTC_CNTL");
+            break;
+        case ESP_SLEEP_WAKEUP_TIMER:
+            Serial.println("Wakeup caused by timer");
+            strcpy(reson, "timer");
+            break;
+        case ESP_SLEEP_WAKEUP_TOUCHPAD:
+            Serial.println("Wakeup caused by touchpad");
+            strcpy(reson, "touchpad");
+            break;
+        case ESP_SLEEP_WAKEUP_ULP:
+            Serial.println("Wakeup caused by ULP program");
+            strcpy(reson, "ULP");
+            break;
+        default:
+            Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+            snprintf(reson, sizeof(reson), "other %d", wakeup_reason); // 正确格式化
+            break;
+        }
+        return reson;
     }
 };
 #endif
