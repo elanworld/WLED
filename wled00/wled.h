@@ -299,7 +299,7 @@ WLED_GLOBAL int8_t irPin _INIT(IRPIN);
 
 //WLED_GLOBAL byte presetToApply _INIT(0);
 
-WLED_GLOBAL char ntpServerName[33] _INIT("ntp.aliyun.com");   // NTP server to use
+WLED_GLOBAL char ntpServerName[33] _INIT("0.wled.pool.ntp.org");   // NTP server to use
 
 // WiFi CONFIG (all these can be changed via web UI, no need to set them here)
 WLED_GLOBAL char clientSSID[33] _INIT(CLIENT_SSID);
@@ -474,7 +474,7 @@ WLED_GLOBAL char last_signal_src[13]   _INIT("");
 // Time CONFIG
 WLED_GLOBAL bool ntpEnabled _INIT(true);    // get internet time. Only required if you use clock overlays or time-activated macros
 WLED_GLOBAL bool useAMPM _INIT(false);       // 12h/24h clock format
-WLED_GLOBAL byte currentTimezone _INIT(23);   // Timezone ID. Refer to timezones array in wled10_ntp.ino
+WLED_GLOBAL byte currentTimezone _INIT(0);   // Timezone ID. Refer to timezones array in wled10_ntp.ino
 WLED_GLOBAL int utcOffsetSecs _INIT(0);      // Seconds to offset from UTC before timzone calculation
 
 WLED_GLOBAL byte overlayCurrent _INIT(0);    // 0: no overlay 1: analog clock 2: was single-digit clock 3: was cronixie

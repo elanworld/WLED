@@ -14,6 +14,7 @@
 #ifdef USERMOD_HMEASSISTANT_DISCOVERY
 #include "../usermods/homeassistant_mqtt_v2/homeassistant_discovery.h"
 #endif
+
 #ifdef USERMOD_BLE_GATT
 #include "../usermods/ble_gatt_api/ble_gatt_api.h"
 #endif
@@ -21,11 +22,17 @@
 #ifdef USERMOD_LANGUAGE
 #include "../usermods/Language_translation/language_translation.h"
 #endif
+
 #ifdef USERMOD_SLEEP
 #include "../usermods/sleep_manager/sleep_manager.h"
 #endif
+
 #ifdef USERMOD_BUTTONSENSOR
 #include "../usermods/button_sensor/button_sensor.h"
+#endif
+
+#ifdef USERMOD_SETTING
+#include "../usermods/usermod_v2_setting/usermod_v2_setting.h"
 #endif
 
 #ifdef USERMOD_BATTERY
@@ -421,5 +428,8 @@ void registerUsermods()
   #endif
   #ifdef USERMOD_BUTTONSENSOR
   usermods.add(new ButtonSensorUsermod());
+  #endif
+  #ifdef USERMOD_SETTING
+  usermods.add(new SettingUsermod());
   #endif
 }
