@@ -13,8 +13,10 @@
 #else
 #define WAKEUP_TOUCH_PIN 15
 #endif
-#endif //WAKEUP_TOUCH_PIN
-
+#endif // WAKEUP_TOUCH_PIN
+#ifndef CONFIGPINS
+#define CONFIGPINS 0, 1, 1 // GPIO NUM,start pull up(1)down(0),end pull up(1)down(0)dis(-1)...
+#endif
 class SleepManager : public Usermod
 {
 private:
@@ -37,10 +39,8 @@ private:
 public:
     virtual void setup()
     {
-        int gpioPinsDown[] = {25, 26};
-        pull_up_down(gpioPinsDown, sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]), false, true);
-        int gpioPinsup[] = {27};
-        pull_up_down(gpioPinsup, sizeof(gpioPinsup) / sizeof(gpioPinsup[0]), true, false);
+        int confGpioPins[] = {CONFIGPINS};
+        configureGpios(confGpioPins, sizeof(confGpioPins) / sizeof(confGpioPins[0]), true);
         pinManager.allocatePin(voltagePin, false, PinOwner::Button);
     }
 
@@ -118,10 +118,8 @@ public:
                     DEBUG_PRINTLN("");
                 }
             }
-            int gpioPinsDown[] = {4, 27};
-            pull_up_down(gpioPinsDown, sizeof(gpioPinsDown) / sizeof(gpioPinsDown[0]), false, true);
-            int gpioPinsup[] = {0, 26, 25};
-            pull_up_down(gpioPinsup, sizeof(gpioPinsup) / sizeof(gpioPinsup[0]), true, false);
+            int confGpioPins[] = {CONFIGPINS};
+            configureGpios(confGpioPins, sizeof(confGpioPins) / sizeof(confGpioPins[0]), true);
             WiFi.disconnect();
             WiFi.mode(WIFI_OFF);
             // 初始化触摸传感器
@@ -142,21 +140,60 @@ public:
         }
     }
 
-    void pull_up_down(int gpioPins[], int numPins, bool up, bool down)
+    void configureGpios(int gpioPins[], int size, bool start)
     {
-        for (int i = 0; i < numPins; i++)
+        for (int i = 0; i < size; i += 3)
         {
-            gpio_set_direction((gpio_num_t)gpioPins[i], GPIO_MODE_INPUT); // 设置为输入模式（高阻态）
-            gpio_pullup_dis((gpio_num_t)gpioPins[i]);                     // 禁用上拉电阻
-            gpio_pulldown_dis((gpio_num_t)gpioPins[i]);                   // 禁用下拉电阻
-            if (up)
+            int gpioPin = gpioPins[i];       // GPIO 引脚
+            int startFlag = gpioPins[i + 1]; // 启动执行标志（1: 拉高，0: 拉低）
+            int endFlag = gpioPins[i + 2];   // 结束执行标志（1: 拉低，0: 拉高）
+
+            // 如果是启动执行（start = true），根据第二位拉高或拉低
+            if (start)
             {
-                ESP_ERROR_CHECK(gpio_pullup_en((gpio_num_t)gpioPins[i]));
+                if (startFlag == 1)
+                {
+                    pull_up_down(gpioPin, true, false); // 启动执行：拉高
+                }
+                else if (startFlag == 0)
+                {
+                    pull_up_down(gpioPin, false, true); // 启动执行：拉低
+                }
+                else
+                {
+                    pull_up_down(gpioPin, false, false); // 取消拉低拉高
+                }
             }
-            if (down)
+            // 如果是结束执行（start = false），根据第三位拉高或拉低
+            else
             {
-                ESP_ERROR_CHECK(gpio_pulldown_en((gpio_num_t)gpioPins[i]));
+                if (endFlag == 1)
+                {
+                    pull_up_down(gpioPin, true, false);
+                }
+                else if (endFlag == 0)
+                {
+                    pull_up_down(gpioPin, false, true);
+                }
+                else
+                {
+                    pull_up_down(gpioPin, false, false); // 取消拉低拉高
+                }
             }
+        }
+    }
+
+    void pull_up_down(int gpioPin, bool up, bool down)
+    {
+        gpio_pullup_dis((gpio_num_t)gpioPin);   // 禁用上拉电阻
+        gpio_pulldown_dis((gpio_num_t)gpioPin); // 禁用下拉电阻
+        if (up)
+        {
+            ESP_ERROR_CHECK(gpio_pullup_en((gpio_num_t)gpioPin));
+        }
+        if (down)
+        {
+            ESP_ERROR_CHECK(gpio_pulldown_en((gpio_num_t)gpioPin));
         }
     }
 
