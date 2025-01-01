@@ -28,7 +28,7 @@ public:
             // 设置GPIO引脚的中断，任何引脚电平变化都会触发中断
             attachInterrupt(digitalPinToInterrupt(sensorPin), handleSensorInterrupt, CHANGE);
             DEBUG_PRINTLN("Button Sensor Usermod Initialized");
-            pinMode(sensorPin, pullUp ? INPUT_PULLDOWN : INPUT_PULLUP);
+            pinMode(sensorPin, pullUp ? INPUT_PULLUP : INPUT_PULLDOWN);
         }
         else
         {
