@@ -39,6 +39,7 @@ private:
 public:
     virtual void setup()
     {
+        phase_wakeup_reason();
         int confGpioPins[] = {CONFIGPINS};
         configureGpios(confGpioPins, sizeof(confGpioPins) / sizeof(confGpioPins[0]), true);
         pinManager.allocatePin(voltagePin, false, PinOwner::Button);
@@ -124,7 +125,7 @@ public:
             WiFi.mode(WIFI_OFF);
             // 初始化触摸传感器
             touchSleepWakeUpEnable(WAKEUP_TOUCH_PIN, touchThreshold);
-            ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, 0));
+            // ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, 0)); // Conflicting wake-up triggers: touch ext0
             ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_0, ESP_EXT1_WAKEUP_ALL_LOW));
             delay(2000); // wati gpio level restore ...
 #ifndef ARDUINO_ARCH_ESP32C3
