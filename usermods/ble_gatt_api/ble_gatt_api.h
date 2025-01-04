@@ -192,7 +192,8 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks, BleMod
 
 class BleGattApiServer : public Usermod, BleMod
 {
-
+private:
+        bool bleOpen false;
 public:
   virtual void setup()
   {
