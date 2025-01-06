@@ -24,7 +24,7 @@
 #endif
 
 #ifdef USERMOD_SLEEP
-#include "../usermods/sleep_manager/sleep_manager.h"
+#include "../usermods/deep_sleep/usermod_deep_sleep.h"
 #endif
 
 #ifdef USERMOD_BUTTONSENSOR
@@ -424,7 +424,7 @@ void registerUsermods()
   usermods.add(new LanguageUsermod());
   #endif
   #ifdef USERMOD_SLEEP
-  usermods.add(new SleepManager());
+  usermods.add(new DeepSleepUsermod());
   #endif
   #ifdef USERMOD_BUTTONSENSOR
   usermods.add(new ButtonSensorUsermod());
