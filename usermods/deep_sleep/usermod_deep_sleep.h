@@ -107,6 +107,7 @@ class DeepSleepUsermod : public Usermod {
     }
 
     void pull_up_down(int gpioPin, bool up, bool down) {
+      rtc_gpio_hold_dis((gpio_num_t)gpioPin);
       rtc_gpio_pullup_dis((gpio_num_t)gpioPin);
       rtc_gpio_pulldown_dis((gpio_num_t)gpioPin);
       if (up) {
@@ -115,19 +116,9 @@ class DeepSleepUsermod : public Usermod {
       if (down) {
         ESP_ERROR_CHECK(rtc_gpio_pulldown_en((gpio_num_t)gpioPin));
       }
+      rtc_gpio_hold_en((gpio_num_t)gpioPin);
     }
 
-    bool haveWakeupLock() const
-    {
-        for (const auto &pair : modules)
-        {
-            if (pair.second)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
     void configureGpios(int gpioPins[], int size, bool start) {
       for (int i = 2; i < size; i += 3) {
         int gpioPin = gpioPins[i - 2];
@@ -186,6 +177,7 @@ class DeepSleepUsermod : public Usermod {
         else
           halerror = esp_deep_sleep_enable_gpio_wakeup(1<<wakeupPin, ESP_GPIO_WAKEUP_GPIO_LOW);
         #else // ESP32, S2, S3
+        rtc_gpio_hold_dis((gpio_num_t)wakeupPin);
         gpio_pulldown_dis((gpio_num_t)wakeupPin); // disable internal pull resistors for GPIO use
         gpio_pullup_dis((gpio_num_t)wakeupPin);
         if(noPull) {
@@ -197,6 +189,7 @@ class DeepSleepUsermod : public Usermod {
             rtc_gpio_pulldown_en((gpio_num_t)wakeupPin);
           else
             rtc_gpio_pullup_en((gpio_num_t)wakeupPin);
+          rtc_gpio_hold_en((gpio_num_t)wakeupPin);
         }
         // ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(GPIO_NUM_26, 0)); //
         // Conflicting wake-up triggers: touch ext0

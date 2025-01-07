@@ -24,6 +24,7 @@ public:
         currentTimezone = TIMEZONE;
 #endif
         init = false;
+        serializeConfig();
     }
 
     void loop()
