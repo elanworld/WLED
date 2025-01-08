@@ -30,9 +30,8 @@
 #endif
 #endif // DEEPSLEEP_WAKEUP_TOUCH_PIN
 #ifndef DEEPSLEEP_CONFIGPINS
-#define DEEPSLEEP_CONFIGPINS 0, 1, 1 // GPIO NUM,start pull up(1)down(0),end pull up(1)down(0)dis(-1)...
+#define DEEPSLEEP_CONFIGPINS 0, 1, 1 // GPIO NUM1,start code status,end pull code,GPIO NUM2...[code:down(0)up(1)down whith hold(2)up witch hold(3)]
 #endif
-RTC_DATA_ATTR bool powerup = true; // variable in RTC data persists on a reboot
 
 class DeepSleepUsermod : public Usermod {
 
@@ -48,7 +47,6 @@ class DeepSleepUsermod : public Usermod {
     int wakeupAfter = DEEPSLEEP_WAKEUPINTERVAL; // in seconds, <=0: button only
     bool presetWake = false; // wakeup timer for preset
     int sleepDelay = DEEPSLEEP_DELAY; // in seconds, 0 = immediate
-    int delaycounter = 5; // delay deep sleep at bootup until preset settings are applied
     uint32_t lastLoopTime = 0;
     bool sleepNextLoop = false; // tag for next starting deep sleep
 
@@ -106,33 +104,45 @@ class DeepSleepUsermod : public Usermod {
       return reson;
     }
 
-    void pull_up_down(int gpioPin, bool up, bool down) {
-      rtc_gpio_hold_dis((gpio_num_t)gpioPin);
-      rtc_gpio_pullup_dis((gpio_num_t)gpioPin);
-      rtc_gpio_pulldown_dis((gpio_num_t)gpioPin);
+    void pull_up_down(int gpioPin, bool up, bool down, bool en) {
+      ESP_ERROR_CHECK(rtc_gpio_hold_dis((gpio_num_t)gpioPin));
+      ESP_ERROR_CHECK(rtc_gpio_pullup_dis((gpio_num_t)gpioPin));
+      ESP_ERROR_CHECK(rtc_gpio_pulldown_dis((gpio_num_t)gpioPin));
       if (up) {
         ESP_ERROR_CHECK(rtc_gpio_pullup_en((gpio_num_t)gpioPin));
       }
       if (down) {
         ESP_ERROR_CHECK(rtc_gpio_pulldown_en((gpio_num_t)gpioPin));
       }
-      rtc_gpio_hold_en((gpio_num_t)gpioPin);
+      if (en) {
+        ESP_ERROR_CHECK(rtc_gpio_hold_en((gpio_num_t)gpioPin));
+      }
     }
 
     void configureGpios(int gpioPins[], int size, bool start) {
       for (int i = 2; i < size; i += 3) {
         int gpioPin = gpioPins[i - 2];
-        int flag = start? gpioPins[i - 1]: gpioPins[i];
+        int flag = start ? gpioPins[i - 1] : gpioPins[i];
 
-        if (start && flag != -1 && !pinManager.allocatePin(gpioPin, false, PinOwner::UM_DEEP_SLEEP)) {
-          DEBUG_PRINTF("failed to allocate GPIO for usermod deep sleep: %d\n", gpioPin);
+        if (flag != -1) { // release gpio
+          pull_up_down(gpioPin, false, false, false);
+        }
+
+        if (start && flag != -1 &&
+            !pinManager.allocatePin(gpioPin, false, PinOwner::UM_DEEP_SLEEP)) {
+          DEBUG_PRINTF("failed to allocate GPIO for usermod deep sleep: %d\n",
+                       gpioPin);
           continue;
         }
 
-        if (flag == 1)
-          pull_up_down(gpioPin, true, false);
-        else if (flag == 0)
-          pull_up_down(gpioPin, false, true);
+        if (flag == 0)
+          pull_up_down(gpioPin, false, true, false);
+        else if (flag == 1)
+          pull_up_down(gpioPin, true, false, false);
+        else if (flag == 2) // down hold
+          pull_up_down(gpioPin, false, true, true);
+        else if (flag == 3) // up hold
+          pull_up_down(gpioPin, true, false, true);
       }
     }
 
@@ -290,22 +300,6 @@ class DeepSleepUsermod : public Usermod {
         }
       }
 
-      if(powerup == false && delaycounter) { // delay sleep in case a preset is being loaded and turnOnAtBoot is disabled (handleIO() does enable offMode temporarily in this case)
-        delaycounter--;
-        if(delaycounter == 2 && offMode) { // force turn on, no matter the settings (device is bricked if user set sleepDelay=0, no bootup preset and turnOnAtBoot=false)
-          if (briS == 0) bri = 10; // turn on at low brightness
-          else bri = briS;
-          strip.setBrightness(bri); // needed to make handleIO() not turn off LEDs (really? does not help in bootup preset)
-          offMode = false;
-          applyPresetWithFallback(0, CALL_MODE_INIT, FX_MODE_STATIC, 0); // try to apply preset 0, fallback to static
-          if (rlyPin >= 0) {
-            digitalWrite(rlyPin, (rlyMde ? HIGH : LOW)); // turn relay on TODO: this should be done by wled, what function to call?
-          }
-        }
-        return;
-      }
-
-      powerup = false; // turn leds on in all subsequent bootups (overrides Turn LEDs on after power up/reset' at reboot)
       if(!pin_is_valid(wakeupPin)) return;
       pinMode(wakeupPin, INPUT); // make sure GPIO is input with pullup/pulldown disabled
       esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL); //disable all wake-up sources (just in case)

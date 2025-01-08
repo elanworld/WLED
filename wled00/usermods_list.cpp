@@ -35,6 +35,10 @@
 #include "../usermods/usermod_v2_setting/usermod_v2_setting.h"
 #endif
 
+#ifdef USERMOD_LOCALTIMER
+#include "../usermods/localtimer/usermod_localtimer.h"
+#endif
+
 #ifdef USERMOD_BATTERY
   #include "../usermods/Battery/usermod_v2_Battery.h"
 #endif
@@ -236,6 +240,10 @@ void registerUsermods()
    * \/ \/ \/
    */
   //usermods.add(new MyExampleUsermod());
+  #ifdef USERMOD_SLEEP
+  usermods.add(new DeepSleepUsermod()); // need release gpio hold first while booting from deep-sleep
+  #endif
+
   #ifdef USERMOD_BATTERY
   usermods.add(new UsermodBattery());
   #endif
@@ -423,11 +431,11 @@ void registerUsermods()
   #ifdef USERMOD_LANGUAGE
   usermods.add(new LanguageUsermod());
   #endif
-  #ifdef USERMOD_SLEEP
-  usermods.add(new DeepSleepUsermod());
-  #endif
   #ifdef USERMOD_BUTTONSENSOR
   usermods.add(new ButtonSensorUsermod());
+  #endif
+  #ifdef USERMOD_LOCALTIMER
+  usermods.add(new LocalTimerUsermod());
   #endif
   #ifdef USERMOD_SETTING
   usermods.add(new SettingUsermod());
