@@ -441,9 +441,9 @@
   #define WLED_PWM_FREQ  19531
 #endif
 #endif
-
-#define TOUCH_THRESHOLD 32 // limit to recognize a touch, higher value means more sensitive
-
+#ifndef TOUCH_THRESHOLD
+  #define TOUCH_THRESHOLD 32 // limit to recognize a touch, higher value means more sensitive
+#endif
 // Size of buffer for API JSON object (increase for more segments)
 #ifdef ESP8266
   #define JSON_BUFFER_SIZE 10240

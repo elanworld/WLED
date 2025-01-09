@@ -2,6 +2,7 @@
 
 #include "wled.h"
 #include "driver/rtc_io.h"
+#include "soc/touch_sensor_periph.h"
 
 #ifdef ESP8266
 #error The "Deep Sleep" usermod does not support ESP8266
@@ -374,6 +375,16 @@ void addToConfig(JsonObject& root) override
           oappend(String(pin).c_str());
           oappend(SET_F(");"));
         }
+      }
+      // dropdown for wakeupPin
+      touch_sensor_channel_io_map[SOC_TOUCH_SENSOR_NUM];
+      oappend(SET_F("dd=addDropdown('DeepSleep','touchPin');"));
+      for (int pin = 0; pin < SOC_TOUCH_SENSOR_NUM; pin++) {
+        oappend(SET_F("addOption(dd,'"));
+        oappend(String(touch_sensor_channel_io_map[pin]).c_str());
+        oappend(SET_F("',"));
+        oappend(String(touch_sensor_channel_io_map[pin]).c_str());
+        oappend(SET_F(");"));
       }
 
       oappend(SET_F("dd=addDropdown('DeepSleep','wakeWhen');"));
