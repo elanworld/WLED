@@ -328,6 +328,15 @@ class UsermodManager {
     byte getModCount() {return numMods;};
     
     void publishMqtt();
+    template <typename T>
+    T* getUsermod(int id) {
+      for (int i = 0; i < WLED_MAX_USERMODS; ++i) {
+        if (ums[i] != nullptr && ums[i]->getId() == id) {
+          return static_cast<T*>(ums[i]);
+        }
+      }
+      return nullptr;
+    };
 };
 
 //usermods_list.cpp
