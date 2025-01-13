@@ -2,7 +2,7 @@
 #include <NimBLEDevice.h>
 #include "../common_tools/wled_common_tools.h"
 #ifdef USERMOD_SLEEP
-#include "../sleep_manager/sleep_manager.h"
+#include "../deep_sleep/usermod_deep_sleep.h"
 #endif
 static NimBLEServer *pServer;
 

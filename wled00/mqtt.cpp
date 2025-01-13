@@ -157,6 +157,7 @@ void publishMqtt()
   strlcpy(subuf, mqttDeviceTopic, 33);
   strcat_P(subuf, PSTR("/v"));
   mqtt->publish(subuf, 0, retainMqttMsg, apires);   // optionally retain message (#2263)
+  usermods.publishMqtt();
   #endif
 }
 
