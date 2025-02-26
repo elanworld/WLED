@@ -56,6 +56,7 @@ class ButtonSensorUsermod : public Usermod {
     if (currentMillis - lastTriggerdTime >= interval) {
       lastTriggerdTime = currentMillis;
       if (sensorTriggered) {
+        DEBUG_PRINTLN("Button Sensor Triggerd");
         sensorTriggered = false;
         ++effectCurrent %= strip.getModeCount();
         stateChanged = true;
@@ -77,15 +78,9 @@ class ButtonSensorUsermod : public Usermod {
     bool configComplete = !top.isNull();
     configComplete &= getJsonValue(top["enable"], enable);
     int newSensorPin;
-    configComplete &= getJsonValue(top["pin"], newSensorPin);
+    configComplete &= getJsonValue(top["pin"], sensorPin);
     bool newPull;
-    configComplete &= getJsonValue(top["pullUp"], newPull);
-    if (newSensorPin != sensorPin || newPull != pullUp) {
-      pinManager.deallocatePin(sensorPin, PinOwner::UM_BUTTON_SENSOR);
-      sensorPin = newSensorPin;
-      pullUp = newPull;
-      setup();
-    }
+    configComplete &= getJsonValue(top["pullUp"], pullUp);
     return configComplete;
   }
 

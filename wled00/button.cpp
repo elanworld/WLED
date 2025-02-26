@@ -78,7 +78,9 @@ void doublePressAction(uint8_t b)
   }
 #endif
 }
-
+#ifdef WLED_DEBUG
+unsigned long lastPrintTime = 0;
+#endif
 bool isButtonPressed(uint8_t i)
 {
   if (btnPin[i]<0) return false;
@@ -98,7 +100,16 @@ bool isButtonPressed(uint8_t i)
       break;
     case BTN_TYPE_TOUCH:
       #if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32C3)
-      if (touchRead(pin) <= touchThreshold) return true;
+      uint16_t value  = touchRead(pin);
+      
+      #ifdef WLED_DEBUG
+        if (millis() - lastPrintTime >= 1000) {
+          lastPrintTime = millis();
+          DEBUG_PRINTF("touch value: %d", value);
+          DEBUG_PRINTLN();
+        }
+      #endif
+      if (value <= touchThreshold) return true;
       #endif
       break;
   }
