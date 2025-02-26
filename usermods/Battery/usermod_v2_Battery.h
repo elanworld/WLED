@@ -34,7 +34,7 @@ class UsermodBattery : public Usermod
     // multiplier for the voltage divider that is in place between ADC pin and battery, default will be 2 but might be adapted to readout voltages over ~5v ESP32 or ~6.6v ESP8266
     float voltageMultiplier = USERMOD_BATTERY_VOLTAGE_MULTIPLIER;
     // mapped battery level based on voltage
-    int8_t batteryLevel = 100;
+    int16_t batteryLevel = 100;
     // offset or calibration value to fine tune the calculated voltage
     float calibration = USERMOD_BATTERY_CALIBRATION;
     
