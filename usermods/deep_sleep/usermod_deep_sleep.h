@@ -35,6 +35,9 @@
   0, 1, 1  // GPIO NUM1,start code status,end pull code,GPIO
 // NUM2...[code:down(0)up(1)down with hold(2)up with hold(3)]
 #endif
+#ifndef DEEPSLEEP_DOUBLE_SLEEP // reEnter to deepsleep mode to make sensor rtc io wake up works
+#define DEEPSLEEP_DOUBLE_SLEEP false
+#endif
 RTC_DATA_ATTR int bootCount = 0;
 
 class DeepSleepUsermod : public Usermod {
@@ -54,6 +57,7 @@ private:
   int sleepDelay = DEEPSLEEP_DELAY;            // in seconds, 0 = immediate
   uint32_t lastLoopTime = 0;
   bool sleepNextLoop = false;  // tag for next starting deep sleep
+  bool doubleSleep = DEEPSLEEP_DOUBLE_SLEEP;
 
   // string that are used multiple time (this will save some flash memory)
   static const char _name[];
@@ -360,9 +364,15 @@ public:
     esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);  // disable all wake-up sources (just in case)
 
     if (bootCount == 1) {
-      startDeepSeelp(false);
-      esp_sleep_enable_timer_wakeup(1 * 1000000);
-      esp_deep_sleep_start();  // go into deep sleep
+      if (doubleSleep) {
+        startDeepSeelp(false);
+        esp_sleep_enable_timer_wakeup(1 * 1000000);
+        esp_deep_sleep_start();  // go into deep sleep
+      }
+      else {
+        bootCount++; // skip bootCount == 2
+        startDeepSeelp(false);
+      }
     }
     startDeepSeelp(true);
   }
@@ -372,6 +382,10 @@ public:
     if (user.isNull()) user = root.createNestedObject("u");
     JsonArray boot = user.createNestedArray(F("boot type"));
     boot.add(F(phase_wakeup_reason()));
+#ifdef DEEPSLEEP_TOUCH_SHOW
+    JsonArray value = user.createNestedArray(F("touch value"));
+    value.add(touchRead(touchPin));
+#endif
   }
 
   // void connected() {} //unused, this is called every time the WiFi is (re)connected
