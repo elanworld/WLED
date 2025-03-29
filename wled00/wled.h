@@ -8,7 +8,21 @@
  */
 
 // version code in format yymmddb (b = daily build)
-#define VERSION 2404040
+#define YEAR   (__DATE__[9] - '0') * 10 + (__DATE__[10] - '0')  // 获取年份后两位
+#define MONTH  (__DATE__[0] == 'J' && __DATE__[1] == 'a' ? 1 :  \
+                __DATE__[0] == 'F' ? 2 :  \
+                __DATE__[0] == 'M' && __DATE__[2] == 'r' ? 3 :  \
+                __DATE__[0] == 'A' && __DATE__[1] == 'p' ? 4 :  \
+                __DATE__[0] == 'M' && __DATE__[2] == 'y' ? 5 :  \
+                __DATE__[0] == 'J' && __DATE__[1] == 'u' && __DATE__[2] == 'n' ? 6 :  \
+                __DATE__[0] == 'J' && __DATE__[1] == 'u' ? 7 :  \
+                __DATE__[0] == 'A' && __DATE__[1] == 'u' ? 8 :  \
+                __DATE__[0] == 'S' ? 9 :  \
+                __DATE__[0] == 'O' ? 10 :  \
+                __DATE__[0] == 'N' ? 11 : 12)
+#define DAY   (__DATE__[4] == ' ' ? 0 : (__DATE__[4] - '0')) * 10 + (__DATE__[5] - '0')
+
+#define VERSION (YEAR * 10000 + MONTH * 100 + DAY)
 
 //uncomment this if you have a "my_config.h" file you'd like to use
 //#define WLED_USE_MY_CONFIG

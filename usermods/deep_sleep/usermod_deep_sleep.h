@@ -338,7 +338,7 @@ public:
     bootCount++;
     DEBUG_PRINTF("boot type: %s;boot count %d\n", phase_wakeup_reason(),
       bootCount);
-    if (bootCount == 2) {
+    if (bootCount == 2 && doubleSleep) {
       startDeepSeelp(true); // second boot to start sleep truely
     }
     int confGpioPins[] = { DEEPSLEEP_CONFIGPINS };
@@ -368,10 +368,6 @@ public:
         startDeepSeelp(false);
         esp_sleep_enable_timer_wakeup(1 * 1000000);
         esp_deep_sleep_start();  // go into deep sleep
-      }
-      else {
-        bootCount++; // skip bootCount == 2
-        startDeepSeelp(false);
       }
     }
     startDeepSeelp(true);

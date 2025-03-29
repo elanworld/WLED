@@ -6,12 +6,12 @@
 class SettingUsermod : public Usermod
 {
 private:
-    bool init = true;
+    bool reinit = true;
 
 public:
     void setup()
     {
-        if (!init)
+        if (!reinit)
         {
             return;
         }
@@ -23,7 +23,7 @@ public:
 #ifdef TIMEZONE
         currentTimezone = TIMEZONE;
 #endif
-        init = false;
+        reinit = false;
         serializeConfig();
     }
 
@@ -35,7 +35,7 @@ public:
     void addToConfig(JsonObject &root)
     {
         JsonObject top = root.createNestedObject("Setting");
-        top["init"] = init;
+        top["reinit"] = reinit;
     }
 
     // 从配置中读取电压相关配置
@@ -43,7 +43,7 @@ public:
     {
         JsonObject top = root["Setting"];
         bool configComplete = !top.isNull();
-        configComplete &= getJsonValue(top["init"], init);
+        configComplete &= getJsonValue(top["reinit"], reinit);
         return configComplete;
     }
 };
