@@ -70,8 +70,10 @@ void fakeApi(String api) {
 }
 
 class UsermodHomeAssistantDiscovery : public Usermod {
+#ifdef USERMOD_BATTERY
  private:
   UsermodBattery *usermodBattery;
+#endif
 
   void sendHADiscoveryMQTT() {
 #if ARDUINO_ARCH_ESP32 || LWIP_VERSION_MAJOR >= 1
@@ -164,6 +166,7 @@ class UsermodHomeAssistantDiscovery : public Usermod {
         strcat(strcat(strcpy(bufcom, "homeassistant/sensor/"), mqttClientID),
                "_ip/config"),
         0, true, payload.c_str());
+#ifdef USERMOD_BATTERY
     // voltage
     if (usermodBattery) {
       doc.clear();
@@ -183,6 +186,7 @@ class UsermodHomeAssistantDiscovery : public Usermod {
       doc["stat_t"] = strcat(strcpy(bufcom, mqttDeviceTopic), "/voltage");
       doc["unit_of_meas"] = "V";
       doc["dev_cla"] = "voltage";
+#endif
 
       dev = doc.createNestedObject("dev");
       setDeviceAttr(dev);
@@ -261,6 +265,7 @@ class UsermodHomeAssistantDiscovery : public Usermod {
       if (dataPtr) *dataPtr = 0;
     }
     mqtt->publish(strcat(strcpy(subuf, mqttDeviceTopic), "_fx/state"), 0, false, lineBuffer);
+#ifdef USERMOD_BATTERY
     // votage
     if (usermodBattery) {
       memset(subuf, 0, sizeof subuf);
@@ -271,14 +276,17 @@ class UsermodHomeAssistantDiscovery : public Usermod {
       mqtt->publish(strcat(strcpy(subuf, mqttDeviceTopic), "/voltage"), 0,
                     false, result);
     }
+#endif
   }
 
  public:
   virtual void setup() {
+#ifdef USERMOD_BATTERY
     usermodBattery = usermods.getUsermod<UsermodBattery>(USERMOD_ID_BATTERY);
     if (usermodBattery) {
       DEBUG_PRINTLN("UsermodHomeAssistantDiscovery inited");
     }
+#endif
   }
   virtual void loop() {
     // implementation here

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "driver/rtc_io.h"
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
 #include "soc/touch_sensor_periph.h"
+#endif
 #include "wled.h"
 
 #ifdef ESP8266
@@ -50,8 +52,10 @@ private:
   uint8_t wakeWhenHigh = DEEPSLEEP_WAKEWHENHIGH;  // wake up when pin goes high
   // if 1, triggers on low if 0
   bool noPull = true;  // use pullup/pulldown resistor
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
   bool enableTouchWakeup = true;
   uint8_t touchPin = DEEPSLEEP_WAKEUP_TOUCH_PIN;
+#endif
   int wakeupAfter = DEEPSLEEP_WAKEUPINTERVAL;  // in seconds, <=0: button only
   bool presetWake = false;                     // wakeup timer for preset
   int sleepDelay = DEEPSLEEP_DELAY;            // in seconds, 0 = immediate
@@ -119,6 +123,7 @@ private:
   }
 
   void pull_up_down(int gpioPin, bool up, bool down, bool en) {
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
     ESP_ERROR_CHECK(rtc_gpio_hold_dis((gpio_num_t)gpioPin));
     ESP_ERROR_CHECK(rtc_gpio_pullup_dis((gpio_num_t)gpioPin));
     ESP_ERROR_CHECK(rtc_gpio_pulldown_dis((gpio_num_t)gpioPin));
@@ -133,6 +138,23 @@ private:
     if (en) {
       ESP_ERROR_CHECK(rtc_gpio_hold_en((gpio_num_t)gpioPin));
     }
+#else
+    ESP_ERROR_CHECK(gpio_hold_dis((gpio_num_t)gpioPin));
+    ESP_ERROR_CHECK(gpio_pullup_dis((gpio_num_t)gpioPin));
+    ESP_ERROR_CHECK(gpio_pulldown_dis((gpio_num_t)gpioPin));
+    ESP_ERROR_CHECK(gpio_pulldown_dis((gpio_num_t)gpioPin));
+    ESP_ERROR_CHECK(gpio_pulldown_dis((gpio_num_t)gpioPin));
+    if (up) {
+      ESP_ERROR_CHECK(gpio_pullup_en((gpio_num_t)gpioPin));
+    }
+    if (down) {
+      ESP_ERROR_CHECK(gpio_pulldown_en((gpio_num_t)gpioPin));
+    }
+    if (en) {
+      ESP_ERROR_CHECK(gpio_hold_en((gpio_num_t)gpioPin));
+    }
+
+#endif
     DEBUG_PRINTF("pull %d %s %s\n", gpioPin,
       down ? "down"
       : up ? "up"
@@ -189,9 +211,11 @@ private:
     }
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
     if (enableTouchWakeup) {
       touchSleepWakeUpEnable(touchPin, touchThreshold);
     }
+#endif
 #if defined(CONFIG_IDF_TARGET_ESP32C3)  // ESP32 C3
     if (noPull)
       gpio_sleep_set_pull_mode((gpio_num_t)wakeupPin, GPIO_FLOATING);
@@ -395,8 +419,10 @@ public:
     top["gpio2"] = wakeupPin2;
     top["wakeWhen"] = wakeWhenHigh;
     top["pull"] = noPull;
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
     top["enableTouchWakeup"] = enableTouchWakeup;
     top["touchPin"] = touchPin;
+#endif
     top["presetWake"] = presetWake;
     top["wakeAfter"] = wakeupAfter;
     top["delaySleep"] = sleepDelay;
@@ -416,9 +442,11 @@ public:
     configComplete &= getJsonValue(top["gpio1"], wakeupPin1, -1);
     configComplete &= getJsonValue(top["gpio2"], wakeupPin2, -1);
     configComplete &= getJsonValue(top["wakeWhen"], wakeWhenHigh, DEEPSLEEP_WAKEWHENHIGH);  // default to wake on low
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
     configComplete &= getJsonValue(top["pull"], noPull, DEEPSLEEP_DISABLEPULL);  // default to no pullup/pulldown
     configComplete &= getJsonValue(top["enableTouchWakeup"], enableTouchWakeup);
     configComplete &= getJsonValue(top["touchPin"], touchPin, DEEPSLEEP_WAKEUP_TOUCH_PIN);
+#endif
     configComplete &= getJsonValue(top["presetWake"], presetWake);
     configComplete &= getJsonValue(top["wakeAfter"], wakeupAfter, DEEPSLEEP_WAKEUPINTERVAL);
     configComplete &= getJsonValue(top["delaySleep"], sleepDelay, DEEPSLEEP_DELAY);
@@ -467,6 +495,8 @@ public:
         oappend(SET_F(");"));
       }
     }
+
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
     // dropdown for wakeupPin
     touch_sensor_channel_io_map[SOC_TOUCH_SENSOR_NUM];
     oappend(SET_F("dd=addDropdown('DeepSleep','touchPin');"));
@@ -477,7 +507,7 @@ public:
       oappend(String(touch_sensor_channel_io_map[pin]).c_str());
       oappend(SET_F(");"));
     }
-
+#endif
       oappend(SET_F("dd=addDropdown('DeepSleep','wakeWhen');"));
       oappend(SET_F("addOption(dd,'Low',0);"));
       oappend(SET_F("addOption(dd,'High',1);"));
