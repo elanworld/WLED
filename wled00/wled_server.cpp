@@ -265,6 +265,7 @@ void initServer()
 #endif
 
   server.on(SET_F("/iro.js"), HTTP_GET, [](AsyncWebServerRequest *request){
+    if (handleIfNoneMatchCacheHeader(request)) return;
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", iroJs, iroJs_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
     setStaticContentCacheHeaders(response);
@@ -436,8 +437,9 @@ void initServer()
 bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest* request)
 {
   AsyncWebHeader* header = request->getHeader("If-None-Match");
-  char tmp[12];
-  sprintf_P(tmp, PSTR("%7d-%02x"), VERSION, cacheInvalidate);
+  char tmp[20] = {0};
+  sprintf_P(tmp, PSTR("%6d-%02x"), VERSION, cacheInvalidate);
+  String tmpStr(tmp);  // 保持 String 对象存活
   if (header && header->value() == String(tmp)) {
     DEBUG_PRINTLN("header cache matched");
     request->send(304);
@@ -457,13 +459,30 @@ void setStaticContentCacheHeaders(AsyncWebServerResponse *response)
   #else
   response->addHeader(F("Cache-Control"),"no-store,max-age=0"); // prevent caching if debug build
   #endif
-  sprintf_P(tmp, PSTR("%7d-%02x"), VERSION, cacheInvalidate);
+  sprintf_P(tmp, PSTR("%6d-%02x"), VERSION, cacheInvalidate);
   response->addHeader(F("ETag"), tmp);
+}
+
+
+bool handleFileReadCache(AsyncWebServerRequest* request, String path){
+  if (handleIfNoneMatchCacheHeader(request)) return true;
+  DEBUG_PRINTLN("WS FileRead: " + path);
+  if(path.endsWith("/")) path += "index.htm";
+  if(path.indexOf("sec") > -1) return false;
+  String contentType = getContentType(request, path);
+  if (WLED_FS.exists(path)) {
+    File file = WLED_FS.open(path, "r");
+    AsyncWebServerResponse *response = request->beginResponse(file, contentType);
+    setStaticContentCacheHeaders(response);
+    request->send(response);
+    return true;
+  }
+  return false;
 }
 
 void serveIndex(AsyncWebServerRequest* request)
 {
-  if (handleFileRead(request, F("/index.htm"))) return;
+  if (handleFileReadCache(request, F("/index.htm"))) return;
 
   if (handleIfNoneMatchCacheHeader(request)) return;
 

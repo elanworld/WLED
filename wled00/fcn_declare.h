@@ -88,6 +88,7 @@ void prepareArtnetPollReply(ArtPollReply* reply);
 void sendArtnetPollReply(ArtPollReply* reply, IPAddress ipAddress, uint16_t portAddress);
 
 //file.cpp
+String getContentType(AsyncWebServerRequest* request, String filename);
 bool handleFileRead(AsyncWebServerRequest*, String path);
 bool writeObjectToFileUsingId(const char* file, uint16_t id, JsonDocument* content);
 bool writeObjectToFile(const char* file, const char* key, JsonDocument* content);

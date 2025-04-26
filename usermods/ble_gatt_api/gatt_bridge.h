@@ -67,16 +67,17 @@ void handleBLERequest(const std::string& jsonStr, BLECharacteristic* pCharacteri
       "Content-Length",  // 内容长度
       "Accept-Encoding",
       "content-encoding",
+      "If-None-Match",
       "Cache-Control",   // 缓存控制
       "Location",        // 重定向目标
       "Set-Cookie",      // Cookie 信息
       "Authorization",   // 认证信息
-      "etag",          // 服务器类型
+      "ETag",          // 服务器类型
       "Date",            // 响应日期
   };
 
   // 在发送请求之前收集这些响应头
-  http.collectHeaders(headersC, 10);
+  http.collectHeaders(headersC, 11);
   http.begin(url);
 
   for (JsonPair kv : headers)
@@ -108,6 +109,8 @@ void handleBLERequest(const std::string& jsonStr, BLECharacteristic* pCharacteri
   for (int i = 0; i < http.headers(); i++) {
     String name = http.headerName(i);
     String value = http.header(i);
+    if (value == "" || value == nullptr) continue;
+    
     resHeaders[name] = value;
     if (name.equalsIgnoreCase("content-encoding") && value.equalsIgnoreCase("gzip")) {
       isGzipped = true;
@@ -122,15 +125,9 @@ void handleBLERequest(const std::string& jsonStr, BLECharacteristic* pCharacteri
       StreamString s;
       int bytesWritten = http.writeToStream(&s);
       DEBUG_PRINTF("bytesWritten %d\n", s.length());
-      // 分配 buffer 用于读取
-      size_t len = s.length();
-      std::unique_ptr<uint8_t[]> buffer(new uint8_t[len]);  // 使用智能指针防止内存泄漏
-
-      // 将流数据读入 buffer
-      s.readBytes(buffer.get(), len);
 
       // Base64 编码
-      String base64Encoded = base64::encode(buffer.get(), len);
+      String base64Encoded = base64::encode((uint8_t *)s.c_str(), s.length());
       DEBUG_PRINTF("base64Encoded len: %d\n", base64Encoded.length());
       doc["raw"] = true;
       doc["body"] = base64Encoded;
@@ -165,6 +162,7 @@ void handleBLERequest(const std::string& jsonStr, BLECharacteristic* pCharacteri
     sentLength += currentChunkSize;
     delay(20);
   }
+  DEBUG_PRINTF("written ble size: %d\n", response.length());
 }
 
 void BLEWriteTask(void* parameter)
@@ -213,13 +211,13 @@ class BridgeCallbacks : public BLECharacteristicCallbacks
     if (!receiving)
     {
       auto* args = new std::pair<std::string, BLECharacteristic*>(accumulatedValue, pCharacteristic);
-      xTaskCreatePinnedToCore(BLEWriteTask, "BLEWriteTask", 8192, args, 1, NULL, 1);
+      xTaskCreatePinnedToCore(BLEWriteTask, "BLEWriteTask", 16384, args, 1, NULL, 1);
     }
   }
 
   void onStatus(BLECharacteristic* pCharacteristic, Status s, uint32_t code) override
   {
-    DEBUG_PRINTLN("onStatus...");
+    DEBUG_PRINTF("status: %d\n", code);
   }
 };
 
