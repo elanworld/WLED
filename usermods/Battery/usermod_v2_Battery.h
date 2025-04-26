@@ -227,8 +227,10 @@ class UsermodBattery : public Usermod
       // }
 
       // Auto off -- Master power off
-      if (autoOffEnabled && (autoOffThreshold >= batteryLevel))
+      if (autoOffEnabled && (autoOffThreshold >= batteryLevel)) {
+        offType = 1;
         turnOff();
+      }
 
 #ifndef WLED_DISABLE_MQTT
       // SmartHome stuff

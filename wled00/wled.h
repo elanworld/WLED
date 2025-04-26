@@ -742,7 +742,7 @@ WLED_GLOBAL UsermodManager usermods _INIT(UsermodManager());
 
 // sleep time
 #ifdef USERMOD_SLEEP
-WLED_GLOBAL bool enableSleep _INIT(false);
+WLED_GLOBAL int8_t offType _INIT(0); // defualt:0  low battery:1
 WLED_GLOBAL RTC_DATA_ATTR struct timeval change_time; // change status time
 WLED_GLOBAL std::unordered_map<std::string, bool> modules; // wakeup module container
 #endif

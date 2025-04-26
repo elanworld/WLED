@@ -195,19 +195,18 @@ private:
     stateUpdated(CALL_MODE_DIRECT_CHANGE);
 
     esp_err_t halerror = ESP_OK;
-    int nextWakeupMin = 0;
+    int nextWakeupMinSec = 0;
     DEBUG_PRINTLN("DeepSleep UM: Entering deep sleep...");
     if (presetWake) {
-      nextWakeupMin = findNextTimerInterval() - 1;  // wakeup before next preset
+      nextWakeupMinSec = (findNextTimerInterval() - 1) * 60;  // wakeup before next preset
     }
     if (wakeupAfter > 0) {
-      nextWakeupMin = nextWakeupMin < wakeupAfter / 60.0 ? nextWakeupMin
-        : wakeupAfter / 60.0;
+      nextWakeupMinSec = nextWakeupMinSec < wakeupAfter ? nextWakeupMinSec
+        : wakeupAfter;
     }
-    if (nextWakeupMin > 0) {
-      esp_sleep_enable_timer_wakeup(nextWakeupMin * 60ULL *
-        (uint64_t)1e6);  // wakeup for preset
-      DEBUG_PRINTF("wakeup after %d minites\n", nextWakeupMin);
+    if (nextWakeupMinSec > 0 && offType != 1) {
+      esp_sleep_enable_timer_wakeup(nextWakeupMinSec * (uint64_t)1e6);  // wakeup for preset
+      DEBUG_PRINTF("wakeup after %d minites\n", nextWakeupMinSec / 60.0);
     }
     WiFi.disconnect();
     WiFi.mode(WIFI_OFF);
