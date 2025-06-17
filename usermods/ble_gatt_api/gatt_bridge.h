@@ -5,18 +5,27 @@
 #include <HTTPClient.h>
 #include <StreamString.h>
 #include <base64.h>
+#include "lwip/sockets.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 // BLE UUIDs
 #define SERVICE_UUID_NAME "bridge"
 #define CHARACTERISTIC_UUID_NAME "bridge01"
-BLEService *pService;
-BLECharacteristic *pCharacteristic;
+#define BLE_CHUNK_TAG_START "START"
+#define BLE_CHUNK_TAG_END   "END"
+#define SERVER_IP   "127.0.0.1"  // Example.com IP
+#define SERVER_PORT 80
+BLEService* pService;
+BLECharacteristic* pCharacteristic;
 size_t MTUSIZE = 20;
+std::vector<uint8_t> bleInputBuffer;
+bool collectingBLE = false;
+int sock = -1;
+bool socketConnected = false;
 
 SemaphoreHandle_t httpSemaphore;
 
-String padStringToUUID(const String &str)
+String padStringToUUID(const String& str)
 {
   String paddedStr = str;
   while (paddedStr.length() < 32)
@@ -26,13 +35,13 @@ String padStringToUUID(const String &str)
 
   // Insert hyphens at appropriate positions
   paddedStr = paddedStr.substring(0, 8) + "-" + paddedStr.substring(8, 12) + "-" +
-              paddedStr.substring(12, 16) + "-" + paddedStr.substring(16, 20) + "-" +
-              paddedStr.substring(20);
+    paddedStr.substring(12, 16) + "-" + paddedStr.substring(16, 20) + "-" +
+    paddedStr.substring(20);
 
   return paddedStr;
 }
 
-String stringToHex(const String &str)
+String stringToHex(const String& str)
 {
   String hexString;
   for (char c : str)
@@ -44,11 +53,11 @@ String stringToHex(const String &str)
   return hexString;
 }
 
-void sendData(String &response, BLECharacteristic *pCharacteristic, bool addEnd=true)
+void sendData(String& response, BLECharacteristic* pCharacteristic, bool addEnd = true)
 {
 
   const size_t chunkSize = MTUSIZE - 3 - 100; // mtu ATT header 3, START TAG 4
-    DEBUG_PRINTF("chunkSize: %d\n", chunkSize);
+  DEBUG_PRINTF("chunkSize: %d\n", chunkSize);
   // const size_t chunkSize = 500;
   size_t responseLength = response.length();
   size_t sentLength = 0;
@@ -64,197 +73,166 @@ void sendData(String &response, BLECharacteristic *pCharacteristic, bool addEnd=
     {
       chunk += "END";
     }
-    pCharacteristic->setValue((uint8_t *)chunk.c_str(), chunk.length());
-    pCharacteristic->notify();
     DEBUG_PRINTF("chunk: %s\n", chunk.c_str());
+    pCharacteristic->setValue((uint8_t*)chunk.c_str(), chunk.length());
+    pCharacteristic->notify();
     sentLength += currentChunkSize;
     delay(20);
   }
 }
 
-void handleBLERequest(const std::string &jsonStr, BLECharacteristic *pCharacteristic)
-{
-  DEBUG_PRINTF("completed JSON: %s\n", jsonStr.c_str());
 
-  size_t allocSize = std::min((uint32_t)(ESP.getMaxAllocHeap() / 2), (uint32_t)(JSON_BUFFER_SIZE * 4));
+// 将响应数据加上标记后分片发 BLE
+void sendBLEChunk(const uint8_t* data, size_t len, bool first = false, bool end = false) {
+  DEBUG_PRINTF("send ble len=%d\n", len);
+  const String TAG_START = BLE_CHUNK_TAG_START;
+  const String TAG_END = BLE_CHUNK_TAG_END;
+  std::vector<uint8_t> outChunk;
 
-  DynamicJsonDocument *docs = new DynamicJsonDocument(allocSize);
-  DynamicJsonDocument &doc = *docs;
-  DeserializationError error = deserializeJson(doc, jsonStr);
-
-  if (error)
-  {
-    Serial.print("Failed to parse JSON: ");
-    DEBUG_PRINTLN(error.f_str());
-    pCharacteristic->setValue("Invalid JSON");
-    pCharacteristic->notify();
-    releaseJSONBufferLock();
-    return;
+  if (first) {
+    outChunk.insert(outChunk.end(),
+      BLE_CHUNK_TAG_START,
+      BLE_CHUNK_TAG_START + strlen(BLE_CHUNK_TAG_START));
   }
 
-  const char *url = doc["url"];
-  const char *method = doc["method"];
-  const char *body = doc["body"];
-  JsonObject headers = doc["header"].as<JsonObject>();
+  outChunk.insert(outChunk.end(), data, data + len);
 
-  HTTPClient http;
-  const char *headersC[] = {
-      "Content-Type",   // 内容类型
-      "Content-Length", // 内容长度
-      "Accept-Encoding",
-      "content-encoding",
-      "If-None-Match",
-      "Cache-Control", // 缓存控制
-      "Location",      // 重定向目标
-      "Set-Cookie",    // Cookie 信息
-      "Authorization", // 认证信息
-      "ETag",          // 服务器类型
-      "Date",          // 响应日期
-  };
-
-  // 在发送请求之前收集这些响应头
-  http.collectHeaders(headersC, 11);
-  http.begin(url);
-
-  for (JsonPair kv : headers)
-  {
-    http.addHeader(kv.key().c_str(), kv.value().as<const char *>());
+  if (end) {
+    outChunk.insert(outChunk.end(),
+      BLE_CHUNK_TAG_END,
+      BLE_CHUNK_TAG_END + strlen(BLE_CHUNK_TAG_END));
   }
 
-  int httpCode;
-  if (strcmp(method, "GET") == 0)
-  {
-    httpCode = http.GET();
+  // 打印调试用字符形式
+  std::string debugStr(outChunk.begin(), outChunk.end());
+  DEBUG_PRINTF("send ble (str): %.*s\n raw:", (int)outChunk.size(), (const char*)outChunk.data());
+  DEBUG_PRINTF("send ble len=%d\n", outChunk.size());
+  for (size_t i = 0; i < outChunk.size(); ++i) {
+    DEBUG_PRINTF(" %02X", outChunk[i]);
   }
-  else if (strcmp(method, "POST") == 0)
-  {
-    httpCode = http.POST(body);
-  }
-  else
-  {
-    pCharacteristic->setValue("Unsupported HTTP method");
-    pCharacteristic->notify();
-    http.end();
-    return;
-  }
-
-  doc["status"] = httpCode;
-
-  JsonObject resHeaders = doc.createNestedObject("header");
-  bool isGzipped = false;
-  for (int i = 0; i < http.headers(); i++)
-  {
-    String name = http.headerName(i);
-    String value = http.header(i);
-    if (value == "" || value == nullptr)
-      continue;
-
-    resHeaders[name] = value;
-    if (name.equalsIgnoreCase("content-encoding") && value.equalsIgnoreCase("gzip"))
-    {
-      isGzipped = true;
-    }
-  }
-  StreamString s;
-  String responsePayload;
-  if (httpCode > 0)
-  {
-      int bytesWritten = http.writeToStream(&s);
-      // unsigned int size = s.length();
-      // DEBUG_PRINTF("bytesWritten %d\n", size);
-
-      // // Base64 编码
-      // String base64Encoded = base64::encode((uint8_t *)s.c_str(), size);
-      // DEBUG_PRINTF("base64Encoded len: %d\n", base64Encoded.length());
-      // DEBUG_PRINTF("StreamString content: %s\n", s.c_str());
-      doc["raw"] = true;
-      // doc["body"] = base64Encoded;
-
-  }
+  DEBUG_PRINTLN("");
 
 
-  String response;
-  serializeJson(doc, response);
-  delete docs;
-  // 去掉结尾的 }
-if (response.endsWith("}")) {
-  response.remove(response.length() - 1);
-}
 
-response = response + ",\"body\":\"";  // 追加 body 字段开始
-  DEBUG_PRINTF("result: %s\n", response.c_str());
-  
-
-  sendData(response, pCharacteristic, false);
-  DEBUG_PRINTF("written ble size: %d\n", response.length());
-  std::vector<uint8_t> buffer;
-  const size_t readChunk = 256; // 原始读取块大小
-  uint8_t temp[readChunk];
-  
-  while (int n = s.readBytes(temp, readChunk))
-  {
-    buffer.insert(buffer.end(), temp, temp + n);
-
-    while (buffer.size() >= 3)
-    {
-      size_t toEncode = (buffer.size() / 3) * 3; // 取3的倍数部分
-      String encoded = base64::encode(buffer.data(), toEncode);
-      DEBUG_PRINTF("setValue: %s\n", encoded.c_str());
-      pCharacteristic->setValue((uint8_t *)encoded.c_str(),encoded.length());
-      pCharacteristic->notify();
-      delay(20);
-
-      // 保留尾部不足3字节的数据
-      std::vector<uint8_t> remain(buffer.begin() + toEncode, buffer.end());
-      buffer = remain;
-    }
-  }
-
-  // 编码剩下不足3字节的最后一部分（会加 padding）
-  if (!buffer.empty())
-  {
-    String finalChunk = base64::encode(buffer.data(), buffer.size());
-    DEBUG_PRINTF("setValue: %s\n", finalChunk.c_str());
-    pCharacteristic->setValue((uint8_t *)finalChunk.c_str(), finalChunk.length());
-    pCharacteristic->notify();
-    delay(20);
-  }
-
-  String endStr =  "\"}END";
-  pCharacteristic->setValue((uint8_t *)endStr.c_str(),endStr.length());
+  // 发送数据
+  pCharacteristic->setValue(outChunk.data(), outChunk.size());
   pCharacteristic->notify();
-  http.end();
+
+  delay(100);
 }
 
-void BLEWriteTask(void *parameter)
+void handleBLERequest(BLECharacteristic* pCharacteristic, std::string value)
 {
-  DEBUG_PRINTLN("BLEWriteTask");
-  // if (xSemaphoreTake(httpSemaphore, portMAX_DELAY) == pdTRUE)
-  // {
-    DEBUG_PRINTLN("BLEWriteTask start");
-    auto *args = (std::pair<std::string, BLECharacteristic *> *)parameter;
-    handleBLERequest(args->first, args->second);
-    delete args;
-    xSemaphoreGive(httpSemaphore);
+  const char* data = value.c_str();
+  size_t length = value.length();
+
+  // DEBUG_PRINTF("ble len: %d\n",length);  // 推荐这种写法，防止 \0 截断
+  std::string chunk((const char*)data, length);
+
+  if (chunk.find("START") != std::string::npos && !socketConnected) {
+    // 建立 socket
+    sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    sockaddr_in dest;
+    dest.sin_family = AF_INET;
+    dest.sin_port = htons(80);
+    inet_pton(AF_INET, SERVER_IP, &dest.sin_addr);
+
+    if (connect(sock, (struct sockaddr*)&dest, sizeof(dest)) < 0) {
+      Serial.println("Socket connect failed");
+      close(sock);
+      sock = -1;
+      return;
+    }
+    socketConnected = true;
+  }
+
+  // 移除 tag 再发送
+  std::string cleanChunk = chunk;
+  size_t startPos = cleanChunk.find("START");
+  if (startPos != std::string::npos)
+    cleanChunk.erase(startPos, 5);
+
+  size_t endPos = cleanChunk.find("END");
+  bool isFinal = endPos != std::string::npos;
+  if (isFinal)
+    cleanChunk.erase(endPos, 3);
+
+  // 发送到 socket
+  if (socketConnected && sock >= 0 && !cleanChunk.empty()) {
+    send(sock, cleanChunk.data(), cleanChunk.size(), 0);
+  }
+  else {
+    DEBUG_PRINTLN("skip send socket");
+  }
+
+  if (isFinal) {
+    DEBUG_PRINTLN("start read response");
+    // 读取 socket 响应
+    uint8_t respBuf[400];
+    int len;
+    bool first = true;
+    while (true) {
+      esp_task_wdt_reset();
+      len = recv(sock, respBuf, sizeof(respBuf), 0);
+      if (len < 400) {
+        DEBUG_PRINTLN("recv finished");
+        break;
+      }
+      else if (len == 0) {
+        // 对方关闭连接
+        DEBUG_PRINTLN("recv finished, sending final BLE chunk");
+        sendBLEChunk(respBuf, 0, false, true);
+        break;
+      }
+      else if (len > 0) {
+        sendBLEChunk(respBuf, len, first);
+        first = false;
+      }
+      else {
+        DEBUG_PRINTF("recv error: %d\n", errno);
+        break;
+      }
+    }
+    sendBLEChunk(respBuf, len, false, true);
+    DEBUG_PRINTLN("response done");
+
+    close(sock);
+    sock = -1;
+    socketConnected = false;
+  }
+}
+
+void BLEWriteTask(void* parameter)
+{
+  DEBUG_PRINTLN("BLEWriteTask start");
+  try {
+    auto* args = (std::pair<std::string, BLECharacteristic*> *)parameter;
+    handleBLERequest(args->second, args->first);
+    delete(args);
     DEBUG_PRINTLN("BLEWriteTask end");
     vTaskDelete(NULL);
-  // }
+  }
+  catch (const std::exception& e) {
+    DEBUG_PRINTF("Exception: %s\n", e.what());
+  }
 }
+
+
 
 class BridgeServerCallbacks : public BLEServerCallbacks
 {
-  void onConnect(BLEServer *pServer) override
+  void onConnect(BLEServer* pServer) override
   {
     DEBUG_PRINTLN("clients connected");
   }
 
-  void onDisconnect(BLEServer *pServer) override
+  void onDisconnect(BLEServer* pServer) override
   {
     DEBUG_PRINTLN("clients disconnect...");
     BLEDevice::startAdvertising();
   }
 
-  void onMTUChange(uint16_t MTU, ble_gap_conn_desc *desc) override
+  void onMTUChange(uint16_t MTU, ble_gap_conn_desc* desc) override
   {
     DEBUG_PRINTF("MTU Change to: %d\n", MTU);
     MTUSIZE = MTU;
@@ -266,32 +244,23 @@ class BridgeCallbacks : public BLECharacteristicCallbacks
 {
   std::string accumulatedValue;
   bool receiving = false;
-  void onWrite(BLECharacteristic *pCharacteristic)
+  void onWrite(BLECharacteristic* pCharacteristic)
   {
-    std::string value = pCharacteristic->getValue();
-    if (value.find("START") == 0)
-    {
-      accumulatedValue.clear();
-      receiving = true;
-      value.erase(0, 5);
-    }
-    accumulatedValue += value;
-    if (value.rfind("END") == value.size() - 3)
-    {
-      accumulatedValue.erase(accumulatedValue.size() - 3);
-      receiving = false;
-    }
+    //Debug exception reason: Stack canary watchpoint triggered (nimble_host)
+    // handleBLERequest(pCharacteristic, pCharacteristic->getValue());
 
-    if (!receiving)
-    {
-      auto* args = new std::pair<std::string, BLECharacteristic*>(accumulatedValue, pCharacteristic);
-      xTaskCreatePinnedToCore(BLEWriteTask, "BLEWriteTask", 8192, args, 1, NULL, 1);
-
-      // handleBLERequest(accumulatedValue, pCharacteristic);
-    }
+    auto argsPair = new std::pair<std::string, BLECharacteristic*>(pCharacteristic->getValue(), pCharacteristic);
+    xTaskCreate(
+      BLEWriteTask,
+      "BLEWriteTask",
+      8192,
+      argsPair,     // 传递参数
+      1,
+      NULL
+    );
   }
 
-  void onStatus(BLECharacteristic *pCharacteristic, Status s, int code) override
+  void onStatus(BLECharacteristic* pCharacteristic, Status s, int code) override
   {
     DEBUG_PRINTF("status: %d\n", code);
   }
@@ -302,11 +271,11 @@ void initBLE()
 {
   BLEDevice::init("ESP32-Bridge");
   BLEDevice::setMTU(512);
-  BLEServer *pServer = BLEDevice::createServer();
-  BLEService *pService = pServer->createService(padStringToUUID(stringToHex(SERVICE_UUID_NAME)).c_str());
+  BLEServer* pServer = BLEDevice::createServer();
+  BLEService* pService = pServer->createService(padStringToUUID(stringToHex(SERVICE_UUID_NAME)).c_str());
   pCharacteristic = pService->createCharacteristic(
-      padStringToUUID(stringToHex(CHARACTERISTIC_UUID_NAME)).c_str(),
-      NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY);
+    padStringToUUID(stringToHex(CHARACTERISTIC_UUID_NAME)).c_str(),
+    NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::NOTIFY);
 
   pServer->setCallbacks(new BridgeServerCallbacks());
 
@@ -315,11 +284,14 @@ void initBLE()
   pService->start();
 
   // Start advertising
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
   // pAdvertising->addServiceUUID(padStringToUUID(stringToHex(SERVICE_UUID_NAME)).c_str());
   pAdvertising->setScanResponse(false);
   BLEDevice::startAdvertising();
 
   httpSemaphore = xSemaphoreCreateBinary();
   xSemaphoreGive(httpSemaphore); // 初始化为可用
+}
+
+void checkConncet() {
 }

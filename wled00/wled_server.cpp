@@ -93,6 +93,9 @@ void createEditHandler(bool enable) {
 
 bool captivePortal(AsyncWebServerRequest *request)
 {
+#ifdef USERMOD_BLE_GATT
+  return false;
+#endif
   if (ON_STA_FILTER(request)) return false; //only serve captive in AP mode
   String hostH;
   if (!request->hasHeader(F("Host"))) return false;
