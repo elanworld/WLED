@@ -425,6 +425,12 @@ const char PAGE_dmxmap[] PROGMEM = R"=====()=====";
       filter: "js-minify",
       method: "gzip"
     },
+    {
+      file: "simple_controller.html",
+      name: "simpleController",
+      method: "gzip",
+      filter: "html-minify",
+    },
 
     {
       file: "rangetouch.js",

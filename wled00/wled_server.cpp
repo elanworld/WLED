@@ -293,6 +293,14 @@ void initServer()
   });
 #endif
 
+  server.on("/simple_controller", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (handleIfNoneMatchCacheHeader(request)) return;
+    AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", simpleController, simpleController_length);
+    response->addHeader(FPSTR(s_content_enc),"gzip");
+    setStaticContentCacheHeaders(response);
+    request->send(response);
+  });
+
   server.on(SET_F("/rangetouch.js"), HTTP_GET, [](AsyncWebServerRequest *request){
     AsyncWebServerResponse *response = request->beginResponse_P(200, "application/javascript", rangetouchJs, rangetouchJs_length);
     response->addHeader(FPSTR(s_content_enc),"gzip");
