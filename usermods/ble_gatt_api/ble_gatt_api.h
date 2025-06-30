@@ -205,7 +205,8 @@ public:
     DEBUG_PRINTLN("Starting NimBLE Server");
     if (noWifiSleep)
     {
-      DEBUG_PRINTLN("please set wifi sleep for conexist in blue wifi");
+      noWifiSleep = false;
+      ESP.restart();
       return;
     }
     initBLE();
