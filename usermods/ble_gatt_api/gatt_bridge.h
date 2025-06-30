@@ -23,7 +23,6 @@ bool collectingBLE = false;
 int sock = -1;
 bool socketConnected = false;
 
-SemaphoreHandle_t httpSemaphore;
 
 String padStringToUUID(const String& str)
 {
@@ -240,7 +239,7 @@ class BridgeCallbacks : public BLECharacteristicCallbacks
   void onWrite(BLECharacteristic* pCharacteristic)
   {
     if (pCharacteristic->getDataLength() <= 0) return;
-    
+
     auto argsPair = new std::pair<std::string, BLECharacteristic*>(pCharacteristic->getValue(), pCharacteristic);
     xTaskCreate(
       BLEWriteTask,
@@ -259,9 +258,18 @@ class BridgeCallbacks : public BLECharacteristicCallbacks
 };
 
 // Function to initialize BLE
-void initBLE()
+void initBLE(std::function<void()> createServer)
 {
-  BLEDevice::init("ESP32-Bridge");
+
+  if (strcmp_P(serverDescription, PSTR("WLED")) == 0)
+  {
+    char bufn[15];
+    BLEDevice::init(strcat(strcpy(bufn, "WLED "), escapedMac.c_str() + 6));
+  }
+  else
+  {
+    BLEDevice::init(serverDescription);
+  }
   BLEDevice::setMTU(512);
   BLEServer* pServer = BLEDevice::createServer();
   BLEService* pService = pServer->createService(padStringToUUID(stringToHex(SERVICE_UUID_NAME)).c_str());
@@ -274,16 +282,14 @@ void initBLE()
   DEBUG_PRINTLN("BLE service and characteristic started, advertising...");
   pCharacteristic->setCallbacks(new BridgeCallbacks());
   pService->start();
-
+  createServer();
   // Start advertising
   BLEAdvertising* pAdvertising = BLEDevice::getAdvertising();
   // pAdvertising->addServiceUUID(padStringToUUID(stringToHex(SERVICE_UUID_NAME)).c_str());
   pAdvertising->setScanResponse(false);
   BLEDevice::startAdvertising();
-
-  httpSemaphore = xSemaphoreCreateBinary();
-  xSemaphoreGive(httpSemaphore); // 初始化为可用
 }
+
 
 void checkConncet() {
 }
