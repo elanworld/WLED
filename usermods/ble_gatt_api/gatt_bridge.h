@@ -105,14 +105,8 @@ void sendBLEChunk(const uint8_t* data, size_t len, bool first = false, bool end 
 
   // 打印调试用字符形式
   std::string debugStr(outChunk.begin(), outChunk.end());
-  DEBUG_PRINTF("send ble (str): %.*s\n raw:", (int)outChunk.size(), (const char*)outChunk.data());
-  DEBUG_PRINTF("send ble len=%d\n", outChunk.size());
-  for (size_t i = 0; i < outChunk.size(); ++i) {
-    DEBUG_PRINTF(" %02X", outChunk[i]);
-  }
-  DEBUG_PRINTLN("");
-
-
+  DEBUG_PRINTF("send ble (str): %.*s:", (int)outChunk.size(), (const char*)outChunk.data());
+  DEBUG_PRINTLN();
 
   // 发送数据
   pCharacteristic->setValue(outChunk.data(), outChunk.size());
@@ -169,31 +163,30 @@ void handleBLERequest(BLECharacteristic* pCharacteristic, std::string value)
     DEBUG_PRINTLN("start read response");
     // 读取 socket 响应
     uint8_t respBuf[400];
-    int len;
+    int len = 0;
     bool first = true;
     while (true) {
       esp_task_wdt_reset();
       len = recv(sock, respBuf, sizeof(respBuf), 0);
       if (len < 400) {
-        DEBUG_PRINTLN("recv finished");
+        sendBLEChunk(respBuf, len, first, true);
         break;
       }
       else if (len == 0) {
         // 对方关闭连接
         DEBUG_PRINTLN("recv finished, sending final BLE chunk");
-        sendBLEChunk(respBuf, 0, false, true);
+        sendBLEChunk(respBuf, 0, first, true);
         break;
       }
       else if (len > 0) {
         sendBLEChunk(respBuf, len, first);
-        first = false;
       }
       else {
         DEBUG_PRINTF("recv error: %d\n", errno);
         break;
       }
+      first = false;
     }
-    sendBLEChunk(respBuf, len, false, true);
     DEBUG_PRINTLN("response done");
 
     close(sock);
@@ -246,9 +239,8 @@ class BridgeCallbacks : public BLECharacteristicCallbacks
   bool receiving = false;
   void onWrite(BLECharacteristic* pCharacteristic)
   {
-    //Debug exception reason: Stack canary watchpoint triggered (nimble_host)
-    // handleBLERequest(pCharacteristic, pCharacteristic->getValue());
-
+    if (pCharacteristic->getDataLength() <= 0) return;
+    
     auto argsPair = new std::pair<std::string, BLECharacteristic*>(pCharacteristic->getValue(), pCharacteristic);
     xTaskCreate(
       BLEWriteTask,

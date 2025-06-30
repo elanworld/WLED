@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>WLED 调色盘</title>
@@ -11,227 +12,299 @@
             text-align: center;
             margin: 30px 0;
         }
+
         canvas {
             border-radius: 50%;
             display: block;
             margin: 10px auto;
             cursor: crosshair;
         }
+
+        #brightness {
+            width: 30%;
+        }
+
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .loader {
+            border: 6px solid #eee;
+            border-top: 6px solid #42b983;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+
     </style>
 </head>
+
 <body>
+    <canvas id="colorWheel" width="300" height="300"></canvas>
+    <div style="margin-top: 20px; text-align: center;">
+        <label for="brightness">亮度: <span id="brightnessValue">0</span></label><br>
+        <input type="range" id="brightness" min="0" max="255" step="1" />
+    </div>
+    <div>
+        <select id="effectSelect" onchange="sendToWLED()"></select>
+    </div>
+    <label>
+        <input type="checkbox" id="powerSwitch" onchange="sendToWLED()" />
+        开关灯
+    </label><br>
 
-<h2>🎨 WLED 调色盘</h2>
-<canvas id="colorWheel" width="300" height="300"></canvas>
-<p>RGB: <span id="rgbText">-</span></p>
-<div>
-    <p>当前效果: <span id="effectName">-</span></p>
-    <select id="effectSelect"></select>
-    <button id="setEffectBtn">设置效果</button>
-</div>
+    <a href="/">首页</a>
 
-
-<script>
-    const canvas = document.getElementById("colorWheel");
-    const ctx = canvas.getContext("2d");
-    const rgbText = document.getElementById("rgbText");
-    const radius = canvas.width / 2;
-    let lastClick = null;
-
-    const isLocal = location.hostname === "localhost" || location.hostname === "127.0.0.1";
-    const ip = isLocal ? "http://4.3.2.1" : "";  // 或 null/undefined，如果你想不调用
+    <div id="loading" style="display: none;">
+        <div class="loader"></div>
+    </div>
 
 
-    function drawColorWheel() {
-        const image = ctx.createImageData(canvas.width, canvas.height);
-        for (let y = 0; y < canvas.height; y++) {
-            for (let x = 0; x < canvas.width; x++) {
-                const dx = x - radius;
-                const dy = y - radius;
-                const dist = Math.sqrt(dx * dx + dy * dy);
 
-                if (dist <= radius) {
-                    const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
-                    const sat = dist / radius;
-                    const { r, g, b } = hslToRgb(angle, sat, 0.5);
-                    const index = (y * canvas.width + x) * 4;
-                    image.data[index] = r;
-                    image.data[index + 1] = g;
-                    image.data[index + 2] = b;
-                    image.data[index + 3] = 255;
-                }
+
+    <script>
+        const canvas = document.getElementById("colorWheel");
+        const powerSwitch = document.getElementById("powerSwitch");
+        const ctx = canvas.getContext("2d");
+        const radius = canvas.width / 2;
+        let lastClick = null;
+        let requestInProgress = false;
+
+        const isLocal = location.hostname == '' || (location.hostname === "localhost" || location.hostname === "127.0.0.1") && location.port == 80;
+        const ip = isLocal ? "http://4.3.2.1" : "";
+        const brightnessInput = document.getElementById("brightness");
+        const brightnessValueEl = document.getElementById("brightnessValue");
+
+        brightnessInput.addEventListener("input", async () => {
+            if(brightnessInput.value != 0) {
+                powerSwitch.checked = true
             }
-        }
-        ctx.putImageData(image, 0, 0);
-    }
-
-    function hslToRgb(h, s, l) {
-        h /= 360;
-        let r, g, b;
-
-        if (s === 0) {
-            r = g = b = l;
-        } else {
-            const hue2rgb = (p, q, t) => {
-                if (t < 0) t += 1;
-                if (t > 1) t -= 1;
-                if (t < 1 / 6) return p + (q - p) * 6 * t;
-                if (t < 1 / 2) return q;
-                if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
-                return p;
-            };
-
-            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-            const p = 2 * l - q;
-            r = hue2rgb(p, q, h + 1 / 3);
-            g = hue2rgb(p, q, h);
-            b = hue2rgb(p, q, h - 1 / 3);
-        }
-
-        return {
-            r: Math.round(r * 255),
-            g: Math.round(g * 255),
-            b: Math.round(b * 255)
-        };
-    }
-
-    function getColorAt(x, y) {
-        const imgData = ctx.getImageData(x, y, 1, 1).data;
-        return { r: imgData[0], g: imgData[1], b: imgData[2] };
-    }
-
-    function sendToWLED(r, g, b) {
-        fetch(`${ip}/json/state`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ seg: [{ col: [[r, g, b]] }] })
-        }).catch(err => console.warn("发送失败:", err));
-    }
-
-    function drawSelectionCircle(x, y) {
-        if (!x || !y) return;
-        drawColorWheel(); // 先清除旧圈
-        ctx.beginPath();
-        ctx.arc(x, y, 6, 0, 2 * Math.PI);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-    function findColorPosition(targetR, targetG, targetB) {
-        const tolerance = 15; // 颜色误差容忍范围
-        for (let y = 0; y < canvas.height; y += 2) {
-            for (let x = 0; x < canvas.width; x += 2) {
-                const { r, g, b } = getColorAt(x, y);
-                const dr = Math.abs(r - targetR);
-                const dg = Math.abs(g - targetG);
-                const db = Math.abs(b - targetB);
-                const dx = x - radius;
-                const dy = y - radius;
-                if (dr < tolerance && dg < tolerance && db < tolerance && dx * dx + dy * dy <= radius * radius) {
-                    return { x, y };
-                }
-            }
-        }
-        return null;
-    }
-
-    async function fetchColor() {
-        try {
-            const res = await fetch(`${ip}/json/state`);
-            const data = await res.json();
-            const [r, g, b] = data.seg?.[0]?.col?.[0] || [255, 0, 0];
-            rgbText.textContent = `${r}, ${g}, ${b}`;
-
-            // 查找该 RGB 所在圆盘位置
-            const match = findColorPosition(r, g, b);
-            if (match) {
-                drawSelectionCircle(match.x, match.y);
-            }
-            fetchCurrentEffect(data)
-        } catch (err) {
-            console.warn("❌ 无法拉取 WLED 当前颜色:", err);
-        }
-    }
-
-    canvas.addEventListener("click", (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const dx = x - radius;
-        const dy = y - radius;
-        if (dx * dx + dy * dy > radius * radius) return;
-
-        lastClick = { x, y };
-        const { r, g, b } = getColorAt(x, y);
-        rgbText.textContent = `${r}, ${g}, ${b}`;
-        drawSelectionCircle(x, y);
-        sendToWLED(r, g, b);
-    });
-
-    drawColorWheel();
-
-
-    const effectNameEl = document.getElementById("effectName");
-    const effectSelect = document.getElementById("effectSelect");
-    const setEffectBtn = document.getElementById("setEffectBtn");
-
-    // WLED的效果列表（简化示例，实际可从官方文档或接口获取）
-    const effects = [
-        { id: 0, name: "Solid" },
-        { id: 1, name: "Blink" },
-        { id: 2, name: "Breath" },
-        { id: 3, name: "Wipe" },
-        { id: 4, name: "Rainbow" },
-        // ... 可根据需要补充更多效果
-    ];
-
-    function populateEffects() {
-        effects.forEach(e => {
-            const opt = document.createElement("option");
-            opt.value = e.id;
-            opt.textContent = e.name;
-            effectSelect.appendChild(opt);
+            sendToWLED()
         });
-    }
 
-    async function fetchCurrentEffect(data) {
-        try {
-            const fxId = data.seg?.[0]?.fx;
-            const fxName = data.seg?.[0]?.fxname || "-";
+        function drawColorWheel() {
+            const image = ctx.createImageData(canvas.width, canvas.height);
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const dx = x - radius;
+                    const dy = y - radius;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
 
-            effectNameEl.textContent = fxName;
-
-            // 选中当前效果
-            if (fxId !== undefined) {
-                effectSelect.value = fxId;
+                    if (dist <= radius) {
+                        const angle = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+                        const sat = dist / radius;
+                        const { r, g, b } = hslToRgb(angle, sat, 0.5);
+                        const index = (y * canvas.width + x) * 4;
+                        image.data[index] = r;
+                        image.data[index + 1] = g;
+                        image.data[index + 2] = b;
+                        image.data[index + 3] = 255;
+                    }
+                }
             }
-        } catch (err) {
-            console.warn("拉取效果失败", err);
-            effectNameEl.textContent = "获取失败";
+            ctx.putImageData(image, 0, 0);
         }
-    }
 
-    async function setEffect() {
-        try {
-            const fx = parseInt(effectSelect.value);
-            await fetch(`${ip}/json/state`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ seg: [{ fx }] })
+        function hslToRgb(h, s, l) {
+            h /= 360;
+            let r, g, b;
+
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                const hue2rgb = (p, q, t) => {
+                    if (t < 0) t += 1;
+                    if (t > 1) t -= 1;
+                    if (t < 1 / 6) return p + (q - p) * 6 * t;
+                    if (t < 1 / 2) return q;
+                    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+                    return p;
+                };
+
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1 / 3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1 / 3);
+            }
+
+            return {
+                r: Math.round(r * 255),
+                g: Math.round(g * 255),
+                b: Math.round(b * 255)
+            };
+        }
+
+        function getColorAt(x, y) {
+            const imgData = ctx.getImageData(x, y, 1, 1).data;
+            return { r: imgData[0], g: imgData[1], b: imgData[2] };
+        }
+        function showMessage(msg, err) {
+            console.log(msg, err)
+            const el = document.getElementById("tip") || document.createElement("div");
+            el.id = "tip";
+            el.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#f56c6c;color:white;padding:6px 12px;border-radius:4px;";
+            el.innerText = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2000);
+        }
+        function showLoading() {
+            document.getElementById("loading").style.display = "flex";
+        }
+
+        function hideLoading() {
+            document.getElementById("loading").style.display = "none";
+        }
+        async function sendToWLED(e, on) {
+            if (requestInProgress) {
+                showMessage("请稍后，上一请求尚未完成！");
+                return;
+            }
+            requestInProgress = true;
+            showLoading()
+            try {
+                const bri = parseInt(brightnessInput.value);
+                const fx = parseInt(effectSelect.value);
+                let times = Math.floor(new Date().getTime() / 1000)
+                data = { bri, times ,on: powerSwitch.checked}
+                if (e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const dx = x - radius;
+                    const dy = y - radius;
+                    if (dx * dx + dy * dy > radius * radius) return;
+
+                    lastClick = { x, y };
+                    const { r, g, b } = getColorAt(x, y);
+                    drawSelectionCircle(x, y);
+                    data['seg'] = [{ col: [[r, g, b]], fx }]
+                }
+                await fetch(`${ip}/json/state`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                })
+
+            } catch (err) {
+                showMessage("请求失败，请稍后再试！", err);
+            } finally {
+                requestInProgress = false;
+                hideLoading()
+            }
+        }
+
+        function drawSelectionCircle(x, y) {
+            if (!x || !y) return;
+            drawColorWheel(); // 先清除旧圈
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, 2 * Math.PI);
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        function findColorPosition(targetR, targetG, targetB) {
+            const tolerance = 15; // 颜色误差容忍范围
+            for (let y = 0; y < canvas.height; y += 2) {
+                for (let x = 0; x < canvas.width; x += 2) {
+                    const { r, g, b } = getColorAt(x, y);
+                    const dr = Math.abs(r - targetR);
+                    const dg = Math.abs(g - targetG);
+                    const db = Math.abs(b - targetB);
+                    const dx = x - radius;
+                    const dy = y - radius;
+                    if (dr < tolerance && dg < tolerance && db < tolerance && dx * dx + dy * dy <= radius * radius) {
+                        return { x, y };
+                    }
+                }
+            }
+            return null;
+        }
+
+        async function fetchColor() {
+            if (requestInProgress) {
+                showMessage("请稍后，上一请求尚未完成！");
+                return;
+            }
+            requestInProgress = true;
+            showLoading()
+            try {
+                const res = await fetch(`${ip}/json/state`);
+                const data = await res.json();
+                const [r, g, b] = data.seg?.[0]?.col?.[0] || [255, 0, 0];
+                const bri = data.bri || 0
+
+                // 查找该 RGB 所在圆盘位置
+                const match = findColorPosition(r, g, b);
+                if (match) {
+                    drawSelectionCircle(match.x, match.y);
+                }
+                const fxId = data.seg?.[0]?.fx;
+                if (fxId !== undefined) {
+                    effectSelect.value = fxId;
+                }
+                brightnessInput.value = bri;
+                brightnessValueEl.innerText = bri;
+                powerSwitch.checked = data?.on
+            } catch (err) {
+                showMessage("请求失败，请稍后再试！", err);
+            } finally {
+                requestInProgress = false;
+                hideLoading()
+            }
+        }
+
+        canvas.addEventListener("click", (e) => {
+            sendToWLED(e);
+        });
+
+        drawColorWheel();
+
+        const effectSelect = document.getElementById("effectSelect");
+
+        // WLED的效果列表（简化示例，实际可从官方文档或接口获取）
+        const effects = [
+            { id: 0, name: "Solid" },
+            { id: 1, name: "Blink" },
+            { id: 2, name: "Breath" },
+            { id: 3, name: "Wipe" },
+            { id: 4, name: "Rainbow" },
+            // ... 可根据需要补充更多效果
+        ];
+
+        function populateEffects() {
+            effects.forEach(e => {
+                const opt = document.createElement("option");
+                opt.value = e.id;
+                opt.textContent = e.name;
+                effectSelect.appendChild(opt);
             });
-        } catch (err) {
-            alert("设置效果失败：" + err);
         }
-    }
 
-    setEffectBtn.addEventListener("click", setEffect);
+        // 页面加载时初始化
+        window.addEventListener("DOMContentLoaded", () => {
+            populateEffects();
+            fetchColor();
+        });
 
-    // 页面加载时初始化
-    window.addEventListener("DOMContentLoaded", () => {
-        populateEffects();
-        fetchColor();
-    });
-
-</script>
+    </script>
 </body>
+
 </html>

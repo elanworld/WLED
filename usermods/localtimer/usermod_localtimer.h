@@ -88,10 +88,11 @@ class LocalTimerUsermod : public Usermod {
     configComplete &= getJsonValue(top["saveMultiplier"], saveMultiplier);
     configComplete &= getJsonValue(top["tokiTimeSec"], savedSec);
     configComplete &= getJsonValue(top["tokiTimeMs"], savedMs);
-
-    if (firstBoot()) {  // user timer from config
-      tokiTime.sec = savedSec;
-      tokiTime.ms = savedMs;
+    bool update = false;
+    configComplete &= getJsonValue(top["update"], update);
+    if (update)
+    {
+      toki.setTime(savedSec);
     }
     return configComplete;
   }

@@ -94,7 +94,7 @@ void createEditHandler(bool enable) {
 bool captivePortal(AsyncWebServerRequest *request)
 {
 #ifdef USERMOD_BLE_GATT
-  return false;
+  return false; // ble bridge host may be localhost
 #endif
   if (ON_STA_FILTER(request)) return false; //only serve captive in AP mode
   String hostH;
@@ -450,9 +450,8 @@ bool handleIfNoneMatchCacheHeader(AsyncWebServerRequest* request)
   AsyncWebHeader* header = request->getHeader("If-None-Match");
   char tmp[20] = {0};
   sprintf_P(tmp, PSTR("%6d-%02x"), VERSION, cacheInvalidate);
-  String tmpStr(tmp);  // 保持 String 对象存活
+  String tmpStr(tmp);
   if (header && header->value() == String(tmp)) {
-    DEBUG_PRINTLN("header cache matched");
     request->send(304);
     return true;
   }

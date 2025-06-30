@@ -477,6 +477,13 @@ bool deserializeState(JsonObject root, byte callMode, byte presetId)
   stateUpdated(callMode);
   if (presetToRestore) currentPreset = presetToRestore;
 
+  if (root.containsKey("times"))
+  {
+    int times = root[F("times")].as<int>();
+    toki.setTime(times);
+  }
+  
+
   return stateResponse;
 }
 
