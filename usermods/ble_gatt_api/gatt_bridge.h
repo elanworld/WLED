@@ -104,22 +104,20 @@ void sendBLEChunk(const uint8_t* data, size_t len, bool first = false, bool end 
 
   // 打印调试用字符形式
   std::string debugStr(outChunk.begin(), outChunk.end());
-  DEBUG_PRINTF("send ble (str): %.*s:", (int)outChunk.size(), (const char*)outChunk.data());
+  DEBUG_PRINTF("send ble (str): %.*s", (int)outChunk.size(), (const char*)outChunk.data());
   DEBUG_PRINTLN();
 
   // 发送数据
   pCharacteristic->setValue(outChunk.data(), outChunk.size());
   pCharacteristic->notify();
-
-  delay(100);
 }
 
 void handleBLERequest(BLECharacteristic* pCharacteristic, std::string value)
 {
   const char* data = value.c_str();
   size_t length = value.length();
-
-  // DEBUG_PRINTF("ble len: %d\n",length);  // 推荐这种写法，防止 \0 截断
+  DEBUG_PRINTF("len: %d,", (int)length);
+  DEBUG_PRINTF("ble (str): %.*s\n", (int)length, (const char*)data);
   std::string chunk((const char*)data, length);
 
   if (chunk.find("START") != std::string::npos && !socketConnected) {
@@ -167,6 +165,13 @@ void handleBLERequest(BLECharacteristic* pCharacteristic, std::string value)
     while (true) {
       esp_task_wdt_reset();
       len = recv(sock, respBuf, sizeof(respBuf), 0);
+      if (len < 0)
+      {
+        DEBUG_PRINTF("recv error: %d\n", errno);
+        sendBLEChunk(respBuf, 0, first, true);
+        break;
+      }
+      
       if (len < 400) {
         sendBLEChunk(respBuf, len, first, true);
         break;
@@ -185,6 +190,7 @@ void handleBLERequest(BLECharacteristic* pCharacteristic, std::string value)
         break;
       }
       first = false;
+      delay(20);
     }
     DEBUG_PRINTLN("response done");
 
@@ -244,7 +250,11 @@ class BridgeCallbacks : public BLECharacteristicCallbacks
     xTaskCreate(
       BLEWriteTask,
       "BLEWriteTask",
+#ifdef CONFIG_IDF_TARGET_ESP32S3
       8192,
+#else
+      4096,
+#endif
       argsPair,     // 传递参数
       1,
       NULL
