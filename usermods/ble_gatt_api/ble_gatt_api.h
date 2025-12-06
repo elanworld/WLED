@@ -207,7 +207,8 @@ public:
     if (noWifiSleep)
     {
       noWifiSleep = false;
-      ESP.restart();
+      doSerializeConfig = true;
+      doReboot = true;
       return;
     }
     
