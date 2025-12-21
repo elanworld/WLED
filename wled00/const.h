@@ -410,7 +410,11 @@
 #ifdef ESP8266
 #define SETTINGS_STACK_BUF_SIZE 2048
 #else
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+#define SETTINGS_STACK_BUF_SIZE 5018  // warning: quite a large value for stack
+#else
 #define SETTINGS_STACK_BUF_SIZE 3608  // warning: quite a large value for stack
+#endif
 #endif
 
 #ifdef WLED_USE_ETHERNET

@@ -204,14 +204,17 @@ public:
       return;
     }
     DEBUG_PRINTLN("Starting NimBLE Server");
+#if defined(ARDUINO_ARCH_ESP32) && !defined(CONFIG_IDF_TARGET_ESP32S2) && !defined(CONFIG_IDF_TARGET_ESP32C3) && !defined(CONFIG_IDF_TARGET_ESP32S3)
+// esp32 only
     if (noWifiSleep)
     {
       noWifiSleep = false;
       doSerializeConfig = true;
       doReboot = true;
+      DEBUG_PRINTLN("turn wifi sleep true and restart...");
       return;
     }
-    
+#endif
     initBLE([this]() { createBleServer(); });
   }
 
